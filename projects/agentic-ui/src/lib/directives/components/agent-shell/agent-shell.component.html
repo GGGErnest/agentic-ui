@@ -1,0 +1,73 @@
+<!-- Agent Shell — Floating UI for the AI Agent -->
+<div class="agent-shell" [class.expanded]="isExpanded()" [class.shadow-mode]="shadowActive()">
+
+  <!-- Header bar -->
+  <div class="agent-shell__header" (click)="toggleExpand()">
+    <span class="agent-shell__title">
+      🤖 Agentic-UI
+      @if (shadowActive()) {
+        <span class="agent-shell__badge agent-shell__badge--shadow">SHADOW</span>
+      }
+      @if (harness.isRunning()) {
+        <span class="agent-shell__badge agent-shell__badge--running">Thinking…</span>
+      }
+    </span>
+    <span class="agent-shell__stats">{{ visibleCount() }} components visible</span>
+  </div>
+
+  <!-- Expanded body -->
+  @if (isExpanded()) {
+    <div class="agent-shell__body">
+      <!-- Thought stream -->
+      @if (harness.thought(); as thought) {
+        <div class="agent-shell__thought">
+          <div class="agent-shell__thought-label">🧠 Thinking:</div>
+          <div class="agent-shell__thought-text">{{ thought }}</div>
+        </div>
+      }
+
+      <!-- Steps history -->
+      @for (step of harness.steps(); track $index) {
+        <div class="agent-shell__step">
+          @if (step.thought) {
+            <div class="agent-shell__step-thought">{{ step.thought }}</div>
+          }
+          @if (step.action) {
+            <div class="agent-shell__step-action">⚡ {{ step.action }}</div>
+          }
+          @if (step.result) {
+            <div class="agent-shell__step-result">{{ step.result }}</div>
+          }
+        </div>
+      }
+
+      <!-- Input area -->
+      <div class="agent-shell__input-area">
+        <input
+          class="agent-shell__input"
+          type="text"
+          placeholder="Ask the agent…"
+          [value]="userInput()"
+          (input)="userInput.set($any($event.target).value)"
+          (keydown.enter)="sendPrompt()"
+          [disabled]="harness.isRunning()"
+        />
+        <button
+          class="agent-shell__send"
+          (click)="sendPrompt()"
+          [disabled]="harness.isRunning()"
+        >
+          ▶
+        </button>
+      </div>
+
+      <!-- Footer controls -->
+      <div class="agent-shell__footer">
+        <button class="agent-shell__btn" (click)="toggleShadowMode()">
+          {{ shadowActive() ? '👁 Live Mode' : '🕶 Shadow Mode' }}
+        </button>
+        <button class="agent-shell__btn" (click)="reset()">🔄 Reset</button>
+      </div>
+    </div>
+  }
+</div>

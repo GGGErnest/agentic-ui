@@ -3,6 +3,10 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
+    "baseUrl": "../../",
+    "paths": {
+      "agentic-ui": ["./projects/agentic-ui/src/public-api.ts"]
+    },
     "outDir": "../../out-tsc/app",
     "types": []
   },

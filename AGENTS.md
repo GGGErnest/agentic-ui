@@ -11,19 +11,21 @@ Guidance for agents working in the `agentic-ui` Angular CLI monorepo.
 - **Library builder:** ng-packagr with entrypoint at `projects/agentic-ui/src/public-api.ts`
 - **Library output:** `dist/agentic-ui`
 - **Demo app:** Angular CLI application at `projects/demo`
-- **Root tsconfig import path:** `"agentic-ui": ["./dist/agentic-ui"]`
+- **Root tsconfig import path:** `"agentic-ui": ["./projects/agentic-ui/src/public-api.ts"]`
 
 ## Critical Architecture Notes
 
-**The demo app consumes the built library output, not source.**
+**The demo app resolves the library from workspace source, not built dist output.**
 
-After any change to `projects/agentic-ui/src/`, you must rebuild the library before validating the demo:
+The demo imports `agentic-ui` through the root TypeScript path mapping, which points at `projects/agentic-ui/src/public-api.ts`. Demo build and test therefore see library source changes immediately without requiring a library rebuild first.
+
+Build the library when you specifically want to validate the published/package output:
 
 ```bash
 ng build agentic-ui
 ```
 
-Then re-run or restart the demo. The `agentic-ui` import path in demo's tsconfig points to `dist/agentic-ui`, so stale builds will mask changes.
+This still outputs to `dist/agentic-ui`, but stale dist files no longer affect normal demo build/test flows.
 
 **Demo provides mock LLM provider.**
 
@@ -96,7 +98,7 @@ agentic-ui/
 │       │   ├── app/
 │       │   └── styles.scss
 │       └── tsconfig.app.json
-├── dist/agentic-ui/             # Library build output (consumed by demo)
+├── dist/agentic-ui/             # Library build output
 ├── angular.json
 ├── tsconfig.json                # Root (includes import path mapping)
 └── package.json
@@ -104,7 +106,7 @@ agentic-ui/
 
 ## Common Gotchas
 
-1. **Demo doesn't see library changes until rebuild.** Always run `ng build agentic-ui` after library source changes, before validating the demo.
+1. **Demo uses workspace library source.** You can validate demo changes against `projects/agentic-ui/src/` directly. Run `ng build agentic-ui` only when validating package output in `dist/agentic-ui`.
 
 2. **Strict TypeScript by default.** Root tsconfig uses `"strict": true` with `noImplicitOverride`, `noPropertyAccessFromIndexSignature`, and `noImplicitReturns`.
 
@@ -125,3 +127,4 @@ agentic-ui/
 - Demo app: `projects/demo/src/app/`
 - Demo tests: `projects/demo/src/app/**/*.spec.ts`
 - Public API: `projects/agentic-ui/src/public-api.ts`
+- Demo/library path mapping: `tsconfig.json`

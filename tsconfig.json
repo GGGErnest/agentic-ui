@@ -3,8 +3,9 @@
 {
   "compileOnSave": false,
   "compilerOptions": {
+    "baseUrl": ".",
     "paths": {
-      "agentic-ui": ["./dist/agentic-ui"]
+      "agentic-ui": ["./projects/agentic-ui/src/public-api.ts"]
     },
     "strict": true,
     "noImplicitOverride": true,

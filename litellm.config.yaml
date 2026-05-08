@@ -1,0 +1,8 @@
+model_list:
+  - model_name: agentic-demo
+    litellm_params:
+      model: ollama/llama3.2:3b
+      api_base: ${OLLAMA_API_BASE}
+
+general_settings:
+  master_key: ${LITELLM_API_KEY}

@@ -1,4 +1,4 @@
-import { Component, signal } from '@angular/core';
+import { Component, signal, computed, viewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
@@ -226,6 +226,9 @@ interface Task {
   `],
 })
 export class CrudDemo {
+  // ---- View refs ----
+  readonly table = viewChild(DataTableComponent);
+
   // ---- Data ----
   readonly tasks = signal<Task[]>([
     { id: '1', title: 'Fix login bug', priority: 'high', status: 'in-progress', assignee: 'Alice' },
@@ -267,8 +270,12 @@ export class CrudDemo {
     description: 'Delete all currently selected tasks.',
     requiresApproval: true,
     execute: async () => {
-      // This would normally read selectedIds from the table via a ViewChild
-      return { success: true, message: 'Delete selected triggered. (Selected row tracking via Facade)' };
+      const ids = this.table()?.selectedIds();
+      if (!ids || ids.size === 0) {
+        return { success: false, message: 'No rows selected.' };
+      }
+      this.tasks.update(list => list.filter(t => !ids.has(t.id)));
+      return { success: true, message: `Deleted ${ids.size} task(s).` };
     },
   }];
 
@@ -296,18 +303,23 @@ export class CrudDemo {
     }],
   }));
 
-  /** Save action — shared between Add and Edit modals */
-  readonly saveAction = [{
-    name: this.editId() ? 'saveEdit' : 'saveAdd',
-    description: this.editId() ? 'Save changes to the current task.' : 'Create the new task.',
-    execute: async () => {
-      this.save();
-      return { success: true, message: 'Task saved.' };
-    },
-  }];
+  /** Save action — shared between Add and Edit modals.
+   *  Uses a getter so name/description update when editId changes. */
+  get saveAction() {
+    return [{
+      name: this.editId() ? 'saveEdit' : 'saveAdd',
+      description: this.editId()
+        ? 'Save changes to the current task.'
+        : 'Create the new task.',
+      execute: async () => {
+        this.save();
+        return { success: true, message: 'Task saved.' };
+      },
+    }];
+  }
 
   // ---- Computed ----
-  readonly selectedCount = signal(0); // Would be wired to DataTable's selectedIds
+  readonly selectedCount = computed(() => this.table()?.selectedIds().size ?? 0);
 
   // ---- Methods ----
   save(): void {

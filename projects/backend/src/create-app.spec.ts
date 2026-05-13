@@ -40,7 +40,7 @@ describe('Backend App', () => {
     expect(res.body).toEqual({ error: 'Unauthorized' });
   });
 
-  it('Authorized request forwards JSON body to LiteLLM with model replacement', async () => {
+  it('Authorized request passes client model through to LiteLLM', async () => {
     mockFetch.mockResolvedValue({
       ok: true,
       status: 200,
@@ -54,7 +54,7 @@ describe('Backend App', () => {
       .set('Authorization', `Bearer ${config.clientToken}`)
       .set('Content-Type', 'application/json')
       .send({
-        model: 'ignored-model',
+        model: 'openrouter/gemini-flash-lite',
         messages: [{ role: 'user', content: 'test' }],
       });
 
@@ -67,6 +67,34 @@ describe('Backend App', () => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${config.litellmApiKey}`,
         }),
+        body: expect.stringContaining('"model":"openrouter/gemini-flash-lite"'),
+      }),
+    );
+  });
+
+  it('Authorized request falls back to configured model when client sends agentic-demo', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      headers: new Map([['content-type', 'application/json']]),
+      text: vi.fn().mockResolvedValue(JSON.stringify({ choices: [{ message: { content: 'response' } }] })),
+      body: null,
+    });
+
+    const res = await request(app)
+      .post('/api/chat/completions')
+      .set('Authorization', `Bearer ${config.clientToken}`)
+      .set('Content-Type', 'application/json')
+      .send({
+        model: 'agentic-demo',
+        messages: [{ role: 'user', content: 'test' }],
+      });
+
+    expect(res.status).toBe(200);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'http://localhost:8000/v1/chat/completions',
+      expect.objectContaining({
+        method: 'POST',
         body: expect.stringContaining('"model":"agentic-demo"'),
       }),
     );

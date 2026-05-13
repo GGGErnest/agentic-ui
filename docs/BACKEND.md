@@ -115,17 +115,18 @@ llm: {
 
 Then rebuild and restart the demo. This is a one-line local escape hatch if LiteLLM/Ollama are unavailable.
 
-## Important: Library Build Consumption
+## Important: Workspace Source Resolution
 
-The demo application imports the `agentic-ui` library from its **built output** at `dist/agentic-ui`, not from source files.
+The demo imports the `agentic-ui` library from its **workspace source** via the root
+TypeScript path mapping — not from built output. Demo build and test see library
+source changes immediately:
 
-If you modify any files under `projects/agentic-ui/src/`, you must rebuild the library before the demo will see the changes:
-
-```bash
-ng build agentic-ui
+```
+tsconfig.json:  "agentic-ui": ["./projects/agentic-ui/src/public-api.ts"]
 ```
 
-Then restart or refresh the demo. The `agentic-ui` import path in the demo's `tsconfig.app.json` points to `dist/agentic-ui`, so an outdated build will mask library changes.
+Build the library only when you want to validate the published package output (`dist/agentic-ui`).
+Stale dist files do NOT affect demo build/test flows.
 
 ## Stopping Services
 
@@ -163,22 +164,21 @@ Press `Ctrl+C` in the terminal running `npm start`.
 
 The demo workflow consists of three independent services:
 
-1. **LiteLLM** (`localhost:8000`) — OpenAI-compatible proxy to Ollama
+1. **LiteLLM** (`localhost:8000`) — OpenAI-compatible proxy
    - Loads model aliases from `litellm.config.yaml`
    - Authenticates with `LITELLM_API_KEY`
-   - Proxies requests to a local Ollama instance
+   - Proxies requests to OpenRouter, Ollama, or any configured provider
 
 2. **Backend** (`localhost:3000`) — Express proxy and validator
    - Validates client tokens (`DEMO_CLIENT_TOKEN`)
    - Forwards `/api/chat/completions` requests to LiteLLM
    - Preserves streaming responses for real-time UI updates
-   - Enforces the LiteLLM model alias (`LITELLM_MODEL`)
+   - Passes through the client's chosen model
 
 3. **Demo App** (`localhost:4200`) — Angular 21 application
-   - Selects `OpenAiProvider` in development (backend mode)
-   - Falls back to `MockLLMProvider` if configured
-   - Uses the backend at `http://localhost:3000/api`
-   - Sends `Authorization: Bearer agentic-ui-demo` header
+   - Uses MockLLMProvider for fast local development
+   - Connect to the backend (via OpenAiProvider) for real LLM calls
+   - Agent Shell shows thought streaming, step history, and telemetry
 
 ## Next Steps
 

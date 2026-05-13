@@ -17,7 +17,11 @@ export function registerChatCompletionsRoute(app: Express, config: BackendConfig
 
     try {
       const body = req.body;
-      const forwardedBody = { ...body, model: config.litellmModel };
+      // Use client's model if provided, otherwise fall back to configured default
+      const model = (body.model && body.model !== 'agentic-demo')
+        ? body.model
+        : config.litellmModel;
+      const forwardedBody = { ...body, model };
 
       const upstreamRes = await fetchImpl(`${config.litellmBaseUrl}/chat/completions`, {
         method: 'POST',

@@ -19,4 +19,23 @@ describe('CrudDemo', () => {
   it('should create', () => {
     expect(component).toBeTruthy();
   });
+
+  it('creates a task directly from the add action parameters', async () => {
+    const before = component.tasks().length;
+
+    const result = await component.addAction[0].execute({
+      title: 'Ship release notes',
+      priority: 'high',
+      assignee: 'Erin',
+    });
+
+    expect(result.success).toBe(true);
+    expect(component.tasks()).toHaveLength(before + 1);
+    expect(component.tasks().at(-1)).toMatchObject({
+      title: 'Ship release notes',
+      priority: 'high',
+      status: 'todo',
+      assignee: 'Erin',
+    });
+  });
 });

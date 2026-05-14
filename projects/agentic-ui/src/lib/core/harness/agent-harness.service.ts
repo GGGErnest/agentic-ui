@@ -142,7 +142,7 @@ export class AgentHarness {
 
         for await (const chunk of stream) {
           if (chunk.type === 'thought' && chunk.text) {
-            this.thought.update(t => t + chunk.text);
+            this.thought.update((t) => t + chunk.text);
           }
           if (chunk.type === 'tool_call' && chunk.data) {
             toolCalls.push(chunk.data);
@@ -154,10 +154,10 @@ export class AgentHarness {
 
       // If aborted externally (by signal, not timeout)
       if (abort.signal.aborted && config.signal?.aborted) {
-        this.steps.update(s => [
+        this.steps.update((s) => [
           ...s,
           {
-            thought: this.thought(),
+            thought: '',
             action: null,
             result: 'Cycle aborted by user.',
             timestamp: Date.now(),
@@ -166,10 +166,19 @@ export class AgentHarness {
         return;
       }
 
-      // If the LLM produced thought text, record it
+      // If the LLM produced text, keep plain replies but avoid storing private
+      // reasoning for tool-driven turns.
       const thoughtText = this.thought();
-      if (thoughtText) {
+      if (thoughtText && toolCalls.length === 0) {
         this.messages.push({ role: 'assistant', content: thoughtText });
+      }
+
+      if (toolCalls.length > 0) {
+        this.messages.push({
+          role: 'assistant',
+          content: '',
+          tool_calls: toolCalls.map((toolCall) => ({ ...toolCall, type: 'function' })),
+        });
       }
 
       // Dispatch tool calls (capped by maxSteps)
@@ -182,15 +191,17 @@ export class AgentHarness {
         let args: Record<string, unknown> = {};
         try {
           args = JSON.parse(toolCall.function.arguments);
-        } catch { /* arguments may be malformed */ }
+        } catch {
+          /* arguments may be malformed */
+        }
 
         const result = await this.world.executeAction(entryId, actionName, args);
 
         // Record the step
-        this.steps.update(s => [
+        this.steps.update((s) => [
           ...s,
           {
-            thought: thoughtText,
+            thought: '',
             action: `${actionName}(${JSON.stringify(args)})`,
             result: result.message,
             timestamp: Date.now(),
@@ -210,18 +221,18 @@ export class AgentHarness {
 
       // If no tool calls, the agent is done
       if (dispatchable.length === 0) {
-        this.steps.update(s => [
+        this.steps.update((s) => [
           ...s,
           {
-            thought: thoughtText,
+            thought: '',
             action: null,
-            result: 'No action taken.',
+            result: thoughtText || 'No action taken.',
             timestamp: Date.now(),
           },
         ]);
       }
     } catch (error) {
-      this.steps.update(s => [
+      this.steps.update((s) => [
         ...s,
         {
           thought: '',

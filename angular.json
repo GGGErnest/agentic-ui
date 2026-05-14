@@ -90,6 +90,11 @@
         },
         "serve": {
           "builder": "@angular/build:dev-server",
+          "options": {
+            "host": "0.0.0.0",
+            "port": 4200,
+            "proxyConfig": "projects/demo/proxy.conf.mjs"
+          },
           "configurations": {
             "production": {
               "buildTarget": "demo:build:production"

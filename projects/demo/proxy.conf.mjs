@@ -1,42 +1,25 @@
 /**
- * Angular dev-server proxy — forwards /api/* → OpenRouter.
+ * Angular dev-server proxy — forwards /api/* → local Express backend.
  *
- * Reads OPENROUTER_API_KEY from projects/demo/.env (gitignored).
- * The key is injected server-side by the proxy — NEVER exposed to the browser.
+ * This keeps the browser on same-origin /api requests, so LAN devices can hit
+ * the Angular dev server without hard-coding localhost:3000 into the bundle.
+ * The backend still owns auth and forwards to LiteLLM.
  *
- * Start:  npm start
+ * Start:
+ *   BACKEND_PORT=3100 npm run backend:dev
+ *   npm start
  */
 
-import { config as dotenvConfig } from 'dotenv';
-import { resolve, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+const BACKEND_TARGET = process.env.AGENTIC_UI_BACKEND_URL ?? 'http://127.0.0.1:3100';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-
-dotenvConfig({ path: resolve(__dirname, '.env') });
-
-const KEY = process.env.OPENROUTER_API_KEY;
-
-if (!KEY) {
-  console.warn('\n⚠  OPENROUTER_API_KEY not set — create projects/demo/.env with your key.\n');
-} else {
-  console.log(`\n✓ OpenRouter proxy ready (key: ${KEY.slice(0, 12)}...)\n`);
-}
+console.log(`\n✓ agentic-ui dev proxy → ${BACKEND_TARGET}\n`);
 
 export default {
   '/api': {
-    target: 'https://openrouter.ai',
-    secure: true,
+    target: BACKEND_TARGET,
+    secure: false,
     changeOrigin: true,
-    pathRewrite: { '^/api': '/api/v1' },
     configure: (proxy) => {
-      proxy.on('proxyReq', (proxyReq) => {
-        if (KEY) {
-          proxyReq.setHeader('Authorization', `Bearer ${KEY}`);
-          proxyReq.setHeader('HTTP-Referer', 'http://localhost:4200');
-          proxyReq.setHeader('X-Title', 'agentic-ui-demo');
-        }
-      });
       proxy.on('error', (err) => console.error('[Proxy Error]', err.message));
     },
   },

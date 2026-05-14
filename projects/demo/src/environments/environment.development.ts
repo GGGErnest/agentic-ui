@@ -16,7 +16,7 @@ export const environment = {
   production: false,
   llm: {
     mode: 'backend',
-    apiUrl: 'http://localhost:3000/api',
+    apiUrl: '/api',
     apiKey: 'agentic-ui-demo',
     model: 'agentic-demo',
   } as DemoLlmProviderConfig,

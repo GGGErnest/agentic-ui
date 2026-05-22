@@ -1,8 +1,18 @@
+import {
+  Component,
+  computed,
+  EventEmitter,
+  inject,
+  Input,
+  OnDestroy,
+  OnInit,
+  Output,
+  signal,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { Component, computed, inject, Input, OnDestroy, OnInit, signal } from '@angular/core';
 import { AgentAction, AgentActionResult } from '../../core/world/agent-action.model';
 import { AgentWorldService } from '../../core/world/agent-world.service';
-import { BulkEditOp, DataRow, RowQuery } from './data-table.models';
+import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.models';
 
 /**
  * DataTableFacade — reference implementation of the Facade Pattern.
@@ -146,6 +156,11 @@ export class DataTableComponent implements OnInit, OnDestroy {
   @Input({ required: true }) columns!: string[];
   @Input({ required: true }) data!: DataRow[];
   @Input() idField: string = 'id';
+
+  // ---- Outputs ----
+
+  @Output() readonly selectionChange = new EventEmitter<string[]>();
+  @Output() readonly rowsDeleted = new EventEmitter<string[]>();
 
   // ---- State ----
 
@@ -295,6 +310,20 @@ export class DataTableComponent implements OnInit, OnDestroy {
     return this.selectedIds().has(String(rowId));
   }
 
+  setSelection(ids: string[]): void {
+    this.selectedIds.set(new Set(ids.map(String)));
+    this.emitSelectionChange();
+  }
+
+  clearSelection(): void {
+    this.selectedIds.set(new Set());
+    this.emitSelectionChange();
+  }
+
+  private emitSelectionChange(): void {
+    this.selectionChange.emit([...this.selectedIds()]);
+  }
+
   toggleSelect(rowId: unknown): void {
     this.selectedIds.update((s) => {
       const next = new Set(s);
@@ -303,6 +332,7 @@ export class DataTableComponent implements OnInit, OnDestroy {
       else next.add(id);
       return next;
     });
+    this.emitSelectionChange();
   }
 
   // ---- Agentic action implementations ----
@@ -367,23 +397,22 @@ export class DataTableComponent implements OnInit, OnDestroy {
     }
 
     const idSet = new Set(params.ids.map(String));
-    const before = this.data.length;
-    const newData = this.data.filter((row) => !idSet.has(String(row[this.idField])));
-    this.data.length = 0;
-    this.data.push(...newData);
-    const affected = before - this.data.length;
+    const deletedCount = this.data.filter(row => idSet.has(String(row[this.idField]))).length;
 
-    // Clear selections for deleted rows
     this.selectedIds.update((s) => {
       const next = new Set(s);
       for (const id of params.ids) next.delete(id);
       return next;
     });
+    this.emitSelectionChange();
+
+    // Emit rowsDeleted event so parent can update its data
+    this.rowsDeleted.emit(params.ids);
 
     return {
       success: true,
-      message: `Deleted ${affected} row(s).`,
-      data: { affectedRows: affected },
+      message: `Deleted ${deletedCount} row(s).`,
+      data: { affectedRows: deletedCount },
     };
   }
 
@@ -424,6 +453,7 @@ export class DataTableComponent implements OnInit, OnDestroy {
       return { success: false, message: `Row with ID "${params.id}" not found.` };
     }
     this.selectedIds.update((s) => new Set(s).add(params.id));
+    this.emitSelectionChange();
     return {
       success: true,
       message: `Selected row "${params.id}". Row data: ${JSON.stringify(row)}`,

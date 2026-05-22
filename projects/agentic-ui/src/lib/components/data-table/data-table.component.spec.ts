@@ -103,7 +103,14 @@ describe('DataTableComponent', () => {
     const { comp } = createComponent();
     const before = comp['data'].length;
     await getAction(comp, 'bulkDelete').execute({ ids: ['1', '3'] });
-    expect(comp['data'].length).toBe(before - 2);
+    expect(comp['data'].length).toBe(before);
+  });
+
+  it('bulkDelete: emits rowsDeleted event', async () => {
+    const { comp } = createComponent();
+    const emitSpy = vi.spyOn(comp.rowsDeleted, 'emit');
+    await getAction(comp, 'bulkDelete').execute({ ids: ['1', '3'] });
+    expect(emitSpy).toHaveBeenCalledWith(['1', '3']);
   });
 
   it('bulkDelete: clears selections', async () => {
@@ -162,5 +169,31 @@ describe('DataTableComponent', () => {
     expect(getAction(comp, 'bulkEdit').requiresApproval).toBe(true);
     expect(getAction(comp, 'bulkDelete').requiresApproval).toBe(true);
     expect(getAction(comp, 'findRow').requiresApproval).toBeFalsy();
+  });
+
+  it('emits selectionChange when a row is toggled', () => {
+    const { comp } = createComponent();
+    const emitSpy = vi.spyOn(comp.selectionChange, 'emit');
+
+    comp.toggleSelect('1');
+
+    expect(emitSpy).toHaveBeenCalledWith(['1']);
+  });
+
+  it('replaces selection through setSelection', () => {
+    const { comp } = createComponent();
+
+    comp.setSelection(['2', '4']);
+
+    expect([...comp.selectedIds()]).toEqual(['2', '4']);
+  });
+
+  it('clears selection through clearSelection', () => {
+    const { comp } = createComponent();
+
+    comp.setSelection(['1', '3']);
+    comp.clearSelection();
+
+    expect([...comp.selectedIds()]).toEqual([]);
   });
 });

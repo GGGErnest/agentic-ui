@@ -67,7 +67,7 @@ export class AgentWorldService {
 
   /** Register a component in the world. Called by [agentic] directive on init. */
   register(entry: WorldEntry): void {
-    this._entries.update(map => {
+    this._entries.update((map) => {
       const next = new Map(map);
       next.set(entry.id, entry);
       return next;
@@ -80,7 +80,7 @@ export class AgentWorldService {
 
   /** Unregister a component. Called by [agentic] directive on destroy. */
   unregister(id: string): void {
-    this._entries.update(map => {
+    this._entries.update((map) => {
       const next = new Map(map);
       const entry = next.get(id);
       if (entry?.element && this.observer) {
@@ -89,7 +89,7 @@ export class AgentWorldService {
       next.delete(id);
       return next;
     });
-    this.visibleIds.update(s => {
+    this.visibleIds.update((s) => {
       const next = new Set(s);
       next.delete(id);
       return next;
@@ -112,18 +112,18 @@ export class AgentWorldService {
   async executeAction(
     entryId: string,
     actionName: string,
-    params?: Record<string, unknown>
+    params?: Record<string, unknown>,
   ): Promise<AgentActionResult> {
     const entry = this._entries().get(entryId);
     if (!entry) {
       return { success: false, message: `Entry "${entryId}" not found in world registry.` };
     }
 
-    const action = entry.actions.find(a => a.name === actionName);
+    const action = entry.actions.find((a) => a.name === actionName);
     if (!action) {
       return {
         success: false,
-        message: `Action "${actionName}" not found on entry "${entryId}". Available: ${entry.actions.map(a => a.name).join(', ')}`,
+        message: `Action "${actionName}" not found on entry "${entryId}". Available: ${entry.actions.map((a) => a.name).join(', ')}`,
       };
     }
 
@@ -156,6 +156,7 @@ export class AgentWorldService {
 
     try {
       const result = await action.execute(params);
+      this.appRef.tick();
       return result;
     } catch (error) {
       return {
@@ -192,15 +193,15 @@ export class AgentWorldService {
       entries.push({
         id,
         role: entry.role,
-        actions: entry.actions.map(a => a.name),
+        actions: entry.actions.map((a) => a.name),
       });
     }
 
-    let context = entries.length === 0
-      ? 'No interactive components are currently visible.'
-      : 'Visible interactive components:\n' + entries
-          .map(e => `  [${e.id}] ${e.role} — actions: ${e.actions.join(', ')}`)
-          .join('\n');
+    let context =
+      entries.length === 0
+        ? 'No interactive components are currently visible.'
+        : 'Visible interactive components:\n' +
+          entries.map((e) => `  [${e.id}] ${e.role} — actions: ${e.actions.join(', ')}`).join('\n');
 
     // Truncate context if over budget
     const truncationSuffix = '\n... (additional entries truncated)';
@@ -210,10 +211,7 @@ export class AgentWorldService {
     }
 
     // Build tools with budget cap (respecting priority order)
-    const tools = this.buildToolDefinitions(
-      new Map(sorted),
-      maxTools,
-    );
+    const tools = this.buildToolDefinitions(new Map(sorted), maxTools);
 
     return { context, tools };
   }
@@ -225,7 +223,7 @@ export class AgentWorldService {
 
     this.observer = new IntersectionObserver(
       (entries) => {
-        this.visibleIds.update(current => {
+        this.visibleIds.update((current) => {
           const next = new Set(current);
           for (const obs of entries) {
             const el = obs.target as HTMLElement;
@@ -241,26 +239,27 @@ export class AgentWorldService {
           return next;
         });
       },
-      { threshold: 0.1 } // Component is "visible" when 10% is in viewport
+      { threshold: 0.1 }, // Component is "visible" when 10% is in viewport
     );
   }
 
   private setupStabilityTracking(): void {
-    this.appRef.isStable
-      .pipe(takeUntilDestroyed(this.destroyRef))
-      .subscribe(stable => {
-        this.isStable.set(stable);
-        this.stable$.next(stable);
-      });
+    this.appRef.isStable.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((stable) => {
+      this.isStable.set(stable);
+      this.stable$.next(stable);
+    });
   }
 
   /** Wait until the Angular application is stable. Used by the harness. */
   async waitForStable(): Promise<void> {
     if (this.appRef.isStable) return;
-    await firstValueFrom(this.stable$.pipe(filter(s => s)));
+    await firstValueFrom(this.stable$.pipe(filter((s) => s)));
   }
 
-  private buildToolDefinitions(entries: Map<string, WorldEntry>, maxTools?: number): ToolDefinition[] {
+  private buildToolDefinitions(
+    entries: Map<string, WorldEntry>,
+    maxTools?: number,
+  ): ToolDefinition[] {
     const tools: ToolDefinition[] = [];
 
     for (const [entryId, entry] of entries) {

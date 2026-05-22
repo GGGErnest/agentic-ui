@@ -17,6 +17,9 @@ describe('Backend App', () => {
       litellmBaseUrl: 'http://localhost:8000/v1',
       litellmApiKey: 'litellm-local-key',
       litellmModel: 'agentic-demo',
+      litellmUpstreamApiBase: 'https://opencode.ai/zen/go/v1',
+      litellmUpstreamApiKey: 'go-key',
+      litellmUpstreamModel: 'deepseek-v4-pro',
     };
     mockFetch = vi.fn();
     app = createApp(config, mockFetch as unknown as typeof fetch);

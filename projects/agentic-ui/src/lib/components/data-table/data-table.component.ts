@@ -1,16 +1,8 @@
-import {
-  Component,
-  Input,
-  OnInit,
-  OnDestroy,
-  signal,
-  computed,
-  inject,
-} from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { AgentWorldService } from '../../core/world/agent-world.service';
+import { Component, computed, inject, Input, OnDestroy, OnInit, signal } from '@angular/core';
 import { AgentAction, AgentActionResult } from '../../core/world/agent-action.model';
-import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.models';
+import { AgentWorldService } from '../../core/world/agent-world.service';
+import { BulkEditOp, DataRow, RowQuery } from './data-table.models';
 
 /**
  * DataTableFacade — reference implementation of the Facade Pattern.
@@ -43,7 +35,8 @@ import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.mod
         <thead>
           <tr>
             @for (col of columns; track col) {
-              <th (click)="toggleSort(col)">{{ col }}
+              <th (click)="toggleSort(col)">
+                {{ col }}
                 @if (sortColumn() === col) {
                   <span>{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
                 }
@@ -75,54 +68,69 @@ import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.mod
       }
     </div>
   `,
-  styles: [`
-    .data-table {
-      border: 1px solid #30363d;
-      border-radius: 6px;
-      overflow: hidden;
-      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-      font-size: 13px;
-      background: #0d1117;
-      color: #e6edf3;
-    }
-    .data-table__toolbar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 10px 14px;
-      background: #161b22;
-      border-bottom: 1px solid #30363d;
-    }
-    .data-table__title { font-weight: 600; }
-    .data-table__count { color: #8b949e; font-size: 12px; }
-    .data-table__table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    th {
-      text-align: left;
-      padding: 8px 14px;
-      background: #161b22;
-      border-bottom: 1px solid #30363d;
-      font-weight: 600;
-      color: #8b949e;
-      cursor: pointer;
-      user-select: none;
-    }
-    th:hover { color: #e6edf3; }
-    td {
-      padding: 8px 14px;
-      border-bottom: 1px solid #21262d;
-    }
-    tr:hover { background: rgba(88, 166, 255, 0.05); }
-    tr.selected { background: rgba(88, 166, 255, 0.12); }
-    .data-table__select-col { width: 40px; }
-    .data-table__empty {
-      padding: 24px;
-      text-align: center;
-      color: #8b949e;
-    }
-  `],
+  styles: [
+    `
+      .data-table {
+        border: 1px solid #30363d;
+        border-radius: 6px;
+        overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+        font-size: 13px;
+        background: #0d1117;
+        color: #e6edf3;
+      }
+      .data-table__toolbar {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 14px;
+        background: #161b22;
+        border-bottom: 1px solid #30363d;
+      }
+      .data-table__title {
+        font-weight: 600;
+      }
+      .data-table__count {
+        color: #8b949e;
+        font-size: 12px;
+      }
+      .data-table__table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th {
+        text-align: left;
+        padding: 8px 14px;
+        background: #161b22;
+        border-bottom: 1px solid #30363d;
+        font-weight: 600;
+        color: #8b949e;
+        cursor: pointer;
+        user-select: none;
+      }
+      th:hover {
+        color: #e6edf3;
+      }
+      td {
+        padding: 8px 14px;
+        border-bottom: 1px solid #21262d;
+      }
+      tr:hover {
+        background: rgba(88, 166, 255, 0.05);
+      }
+      tr.selected {
+        background: rgba(88, 166, 255, 0.12);
+      }
+      .data-table__select-col {
+        width: 40px;
+      }
+      .data-table__empty {
+        padding: 24px;
+        text-align: center;
+        color: #8b949e;
+      }
+    `,
+  ],
 })
 export class DataTableComponent implements OnInit, OnDestroy {
   private readonly world: AgentWorldService;
@@ -158,7 +166,7 @@ export class DataTableComponent implements OnInit, OnDestroy {
     const col = this.filterColumn();
     const text = this.filterText().toLowerCase();
     if (col && text) {
-      rows = rows.filter(row => {
+      rows = rows.filter((row) => {
         const val = row[col];
         return val != null && String(val).toLowerCase().includes(text);
       });
@@ -169,7 +177,8 @@ export class DataTableComponent implements OnInit, OnDestroy {
     if (sc) {
       const dir = this.sortDirection() === 'asc' ? 1 : -1;
       rows.sort((a, b) => {
-        const va = a[sc], vb = b[sc];
+        const va = a[sc],
+          vb = b[sc];
         if (va == null && vb == null) return 0;
         if (va == null) return 1;
         if (vb == null) return -1;
@@ -200,7 +209,12 @@ export class DataTableComponent implements OnInit, OnDestroy {
       description: 'Edit multiple rows at once. Pass an array of IDs and the changes to apply.',
       parameters: [
         { name: 'ids', type: 'array', description: 'Array of row IDs to edit', required: true },
-        { name: 'changes', type: 'object', description: 'Key-value changes to apply', required: true },
+        {
+          name: 'changes',
+          type: 'object',
+          description: 'Key-value changes to apply',
+          required: true,
+        },
       ],
       requiresApproval: true,
       execute: (params) => this.doBulkEdit(params as unknown as BulkEditOp),
@@ -221,7 +235,8 @@ export class DataTableComponent implements OnInit, OnDestroy {
         { name: 'column', type: 'string', description: 'Column name to sort by', required: true },
         { name: 'direction', type: 'string', description: 'asc or desc', enum: ['asc', 'desc'] },
       ],
-      execute: (params) => this.doSortBy(params as unknown as { column: string; direction?: string }),
+      execute: (params) =>
+        this.doSortBy(params as unknown as { column: string; direction?: string }),
     },
     {
       name: 'filterBy',
@@ -235,9 +250,7 @@ export class DataTableComponent implements OnInit, OnDestroy {
     {
       name: 'selectRow',
       description: 'Select a row by ID for subsequent operations.',
-      parameters: [
-        { name: 'id', type: 'string', description: 'Row ID', required: true },
-      ],
+      parameters: [{ name: 'id', type: 'string', description: 'Row ID', required: true }],
       execute: (params) => this.doSelectRow(params as unknown as { id: string }),
     },
     {
@@ -271,7 +284,7 @@ export class DataTableComponent implements OnInit, OnDestroy {
 
   toggleSort(col: string): void {
     if (this.sortColumn() === col) {
-      this.sortDirection.update(d => d === 'asc' ? 'desc' : 'asc');
+      this.sortDirection.update((d) => (d === 'asc' ? 'desc' : 'asc'));
     } else {
       this.sortColumn.set(col);
       this.sortDirection.set('asc');
@@ -283,7 +296,7 @@ export class DataTableComponent implements OnInit, OnDestroy {
   }
 
   toggleSelect(rowId: unknown): void {
-    this.selectedIds.update(s => {
+    this.selectedIds.update((s) => {
       const next = new Set(s);
       const id = String(rowId);
       if (next.has(id)) next.delete(id);
@@ -301,7 +314,7 @@ export class DataTableComponent implements OnInit, OnDestroy {
       return { success: false, message: 'No search value provided.' };
     }
 
-    const matches = this.data.filter(row => {
+    const matches = this.data.filter((row) => {
       const val = row[column];
       return val != null && String(val).toLowerCase().includes(value);
     });
@@ -311,7 +324,10 @@ export class DataTableComponent implements OnInit, OnDestroy {
     this.filterText.set(value);
 
     if (matches.length === 0) {
-      return { success: true, message: `No rows found matching "${query.value}" in column "${column}".` };
+      return {
+        success: true,
+        message: `No rows found matching "${query.value}" in column "${column}".`,
+      };
     }
 
     return {
@@ -352,13 +368,13 @@ export class DataTableComponent implements OnInit, OnDestroy {
 
     const idSet = new Set(params.ids.map(String));
     const before = this.data.length;
-    const newData = this.data.filter(row => !idSet.has(String(row[this.idField])));
+    const newData = this.data.filter((row) => !idSet.has(String(row[this.idField])));
     this.data.length = 0;
     this.data.push(...newData);
     const affected = before - this.data.length;
 
     // Clear selections for deleted rows
-    this.selectedIds.update(s => {
+    this.selectedIds.update((s) => {
       const next = new Set(s);
       for (const id of params.ids) next.delete(id);
       return next;
@@ -371,7 +387,10 @@ export class DataTableComponent implements OnInit, OnDestroy {
     };
   }
 
-  private async doSortBy(params: { column: string; direction?: string }): Promise<AgentActionResult> {
+  private async doSortBy(params: {
+    column: string;
+    direction?: string;
+  }): Promise<AgentActionResult> {
     if (!this.columns.includes(params.column)) {
       return {
         success: false,
@@ -393,15 +412,18 @@ export class DataTableComponent implements OnInit, OnDestroy {
     this.filterColumn.set(params.column);
     this.filterText.set(params.value);
     const count = this.filteredData().length;
-    return { success: true, message: `Filtered by "${params.column}" = "${params.value}". ${count} row(s) visible.` };
+    return {
+      success: true,
+      message: `Filtered by "${params.column}" = "${params.value}". ${count} row(s) visible.`,
+    };
   }
 
   private async doSelectRow(params: { id: string }): Promise<AgentActionResult> {
-    const row = this.data.find(r => String(r[this.idField]) === params.id);
+    const row = this.data.find((r) => String(r[this.idField]) === params.id);
     if (!row) {
       return { success: false, message: `Row with ID "${params.id}" not found.` };
     }
-    this.selectedIds.update(s => new Set(s).add(params.id));
+    this.selectedIds.update((s) => new Set(s).add(params.id));
     return {
       success: true,
       message: `Selected row "${params.id}". Row data: ${JSON.stringify(row)}`,

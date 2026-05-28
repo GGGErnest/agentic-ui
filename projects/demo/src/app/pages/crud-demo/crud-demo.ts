@@ -1,4 +1,4 @@
-import { Component, inject, signal, ViewChild } from '@angular/core';
+import { Component, computed, inject, signal, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import {
@@ -119,17 +119,25 @@ interface PendingMatchRequest {
             <h2>{{ editId() ? '✏️ Edit Task' : '➕ New Task' }}</h2>
 
             <label>Title</label>
-            <input [(ngModel)]="formTitle" placeholder="Task title..." />
+            <input
+              [ngModel]="formTitle()"
+              (ngModelChange)="formTitle.set($event)"
+              placeholder="Task title..."
+            />
 
             <label>Priority</label>
-            <select [(ngModel)]="formPriority">
+            <select [ngModel]="formPriority()" (ngModelChange)="formPriority.set($event)">
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
             </select>
 
             <label>Assignee</label>
-            <input [(ngModel)]="formAssignee" placeholder="Assignee name..." />
+            <input
+              [ngModel]="formAssignee()"
+              (ngModelChange)="formAssignee.set($event)"
+              placeholder="Assignee name..."
+            />
 
             <div class="modal-actions">
               <button class="btn btn-secondary" (click)="closeModal()">Cancel</button>
@@ -138,7 +146,7 @@ interface PendingMatchRequest {
                 agentic
                 [agenticId]="editId() ? 'save-edit-btn' : 'save-add-btn'"
                 [role]="editId() ? 'Modal - Edit' : 'Modal - Add'"
-                [actions]="saveAction"
+                [actions]="saveAction()"
                 (click)="save()"
               >
                 {{ editId() ? 'Save Changes' : 'Create Task' }}
@@ -384,16 +392,16 @@ export class CrudDemo {
   // ---- Modal state ----
   readonly showModal = signal(false);
   readonly editId = signal<string | null>(null);
-  formTitle = '';
-  formPriority: Task['priority'] = 'medium';
-  formAssignee = '';
+  readonly formTitle = signal('');
+  readonly formPriority = signal<Task['priority']>('medium');
+  readonly formAssignee = signal('');
 
   // ---- Filter state ----
   readonly activeFilter = signal<string | null>(null);
 
   // ---- Selection state ----
   readonly selectedTaskIds = signal<string[]>([]);
-  readonly selectedCount = signal(0);
+  readonly selectedCount = computed(() => this.selectedTaskIds().length);
   readonly pendingMatchRequest = signal<PendingMatchRequest | null>(null);
   readonly pendingChoiceIds = signal<Set<string>>(new Set());
 
@@ -469,7 +477,7 @@ export class CrudDemo {
   }));
 
   /** Save action — shared between Add and Edit modals */
-  readonly saveAction = [
+  readonly saveAction = computed(() => [
     {
       name: this.editId() ? 'saveEdit' : 'saveAdd',
       description: this.editId() ? 'Save changes to the current task.' : 'Create the new task.',
@@ -478,16 +486,16 @@ export class CrudDemo {
         return { success: true, message: 'Task saved.' };
       },
     },
-  ];
+  ]);
 
   // ---- Computed ----
 
   // ---- Methods ----
   openAddModal(): void {
     this.editId.set(null);
-    this.formTitle = '';
-    this.formPriority = 'medium';
-    this.formAssignee = '';
+    this.formTitle.set('');
+    this.formPriority.set('medium');
+    this.formAssignee.set('');
     this.showModal.set(true);
   }
 
@@ -515,7 +523,7 @@ export class CrudDemo {
   }
 
   save(): void {
-    if (!this.formTitle.trim()) return;
+    if (!this.formTitle().trim()) return;
 
     if (this.editId()) {
       this.tasks.update((list) =>
@@ -523,9 +531,9 @@ export class CrudDemo {
           t.id === this.editId()
             ? {
                 ...t,
-                title: this.formTitle,
-                priority: this.formPriority,
-                assignee: this.formAssignee,
+                title: this.formTitle(),
+                priority: this.formPriority(),
+                assignee: this.formAssignee(),
               }
             : t,
         ),
@@ -533,10 +541,10 @@ export class CrudDemo {
     } else {
       const newTask: Task = {
         id: crypto.randomUUID().slice(0, 8),
-        title: this.formTitle,
-        priority: this.formPriority,
+        title: this.formTitle(),
+        priority: this.formPriority(),
         status: 'todo',
-        assignee: this.formAssignee || 'Unassigned',
+        assignee: this.formAssignee() || 'Unassigned',
       };
       this.tasks.update((list) => [...list, newTask]);
     }
@@ -545,7 +553,6 @@ export class CrudDemo {
 
   onTableSelectionChange(ids: string[]): void {
     this.selectedTaskIds.set(ids);
-    this.selectedCount.set(ids.length);
   }
 
   onRowsDeleted(deletedIds: string[]): void {

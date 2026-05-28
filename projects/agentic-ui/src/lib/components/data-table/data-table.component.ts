@@ -1,9 +1,11 @@
 import {
   Component,
   computed,
+  effect,
   EventEmitter,
   inject,
-  Input,
+  Injector,
+  input,
   OnDestroy,
   OnInit,
   Output,
@@ -35,16 +37,16 @@ import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.mod
   standalone: true,
   imports: [CommonModule],
   template: `
-    <div class="data-table" [attr.data-agentic-id]="agenticId">
+    <div class="data-table" [attr.data-agentic-id]="agenticId()">
       <div class="data-table__toolbar">
-        <span class="data-table__title">{{ title }}</span>
+        <span class="data-table__title">{{ title() }}</span>
         <span class="data-table__count">{{ filteredData().length }} / {{ totalRows() }} rows</span>
       </div>
 
       <table class="data-table__table">
         <thead>
           <tr>
-            @for (col of columns; track col) {
+            @for (col of columns(); track col) {
               <th (click)="toggleSort(col)">
                 {{ col }}
                 @if (sortColumn() === col) {
@@ -56,16 +58,16 @@ import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.mod
           </tr>
         </thead>
         <tbody>
-          @for (row of filteredData(); track row['id']) {
-            <tr [class.selected]="isSelected(row['id'])">
-              @for (col of columns; track col) {
+          @for (row of filteredData(); track row[idField()]) {
+            <tr [class.selected]="isSelected(row[idField()])">
+              @for (col of columns(); track col) {
                 <td>{{ row[col] }}</td>
               }
               <td>
                 <input
                   type="checkbox"
-                  [checked]="isSelected(row['id'])"
-                  (change)="toggleSelect(row['id'])"
+                  [checked]="isSelected(row[idField()])"
+                  (change)="toggleSelect(row[idField()])"
                 />
               </td>
             </tr>
@@ -144,6 +146,8 @@ import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.mod
 })
 export class DataTableComponent implements OnInit, OnDestroy {
   private readonly world: AgentWorldService;
+  private readonly injector = inject(Injector);
+  private registeredId: string | null = null;
 
   constructor(world?: AgentWorldService) {
     this.world = world ?? inject(AgentWorldService);
@@ -151,11 +155,11 @@ export class DataTableComponent implements OnInit, OnDestroy {
 
   // ---- Inputs ----
 
-  @Input({ required: true }) agenticId!: string;
-  @Input() title: string = 'Data Table';
-  @Input({ required: true }) columns!: string[];
-  @Input({ required: true }) data!: DataRow[];
-  @Input() idField: string = 'id';
+  readonly agenticId = input.required<string>();
+  readonly title = input('Data Table');
+  readonly columns = input.required<string[]>();
+  readonly data = input.required<DataRow[]>();
+  readonly idField = input('id');
 
   // ---- Outputs ----
 
@@ -170,12 +174,12 @@ export class DataTableComponent implements OnInit, OnDestroy {
   readonly filterColumn = signal<string>('');
   readonly selectedIds = signal<Set<string>>(new Set());
 
-  readonly totalRows = computed(() => this.data?.length ?? 0);
+  readonly totalRows = computed(() => this.data().length);
 
   // ---- Computed filtered & sorted data ----
 
   readonly filteredData = computed(() => {
-    let rows = [...(this.data ?? [])];
+    let rows = [...this.data()];
 
     // Filter
     const col = this.filterColumn();
@@ -278,21 +282,42 @@ export class DataTableComponent implements OnInit, OnDestroy {
   // ---- Lifecycle ----
 
   ngOnInit(): void {
-    this.world.register({
-      id: this.agenticId,
-      role: 'DataTable',
-      actions: this.agenticActions,
-      metadata: {
-        columns: this.columns,
-        totalRows: this.data?.length ?? 0,
-        idField: this.idField,
-        facadeType: 'DataTable',
+    // Reactive world registration: re-register whenever signals change
+    effect(
+      () => {
+        const id = this.agenticId();
+        const columns = this.columns();
+        const data = this.data();
+        const idField = this.idField();
+
+        // Unregister previous ID if it changed
+        if (this.registeredId && this.registeredId !== id) {
+          this.world.unregister(this.registeredId);
+        }
+
+        // Register the new snapshot
+        this.world.register({
+          id,
+          role: 'DataTable',
+          actions: this.agenticActions,
+          metadata: {
+            columns,
+            totalRows: data.length,
+            idField,
+            facadeType: 'DataTable',
+          },
+        });
+
+        this.registeredId = id;
       },
-    });
+      { injector: this.injector },
+    );
   }
 
   ngOnDestroy(): void {
-    this.world.unregister(this.agenticId);
+    if (this.registeredId) {
+      this.world.unregister(this.registeredId);
+    }
   }
 
   // ---- UI helpers ----
@@ -338,13 +363,13 @@ export class DataTableComponent implements OnInit, OnDestroy {
   // ---- Agentic action implementations ----
 
   private async doFindRow(query: RowQuery): Promise<AgentActionResult> {
-    const column = query.column ?? this.columns[0];
+    const column = query.column ?? this.columns()[0];
     const value = query.value?.toLowerCase();
     if (!value) {
       return { success: false, message: 'No search value provided.' };
     }
 
-    const matches = this.data.filter((row) => {
+    const matches = this.data().filter((row) => {
       const val = row[column];
       return val != null && String(val).toLowerCase().includes(value);
     });
@@ -377,8 +402,8 @@ export class DataTableComponent implements OnInit, OnDestroy {
 
     let affected = 0;
     const idSet = new Set(op.ids.map(String));
-    for (const row of this.data) {
-      if (idSet.has(String(row[this.idField]))) {
+    for (const row of this.data()) {
+      if (idSet.has(String(row[this.idField()]))) {
         Object.assign(row, op.changes);
         affected++;
       }
@@ -397,7 +422,7 @@ export class DataTableComponent implements OnInit, OnDestroy {
     }
 
     const idSet = new Set(params.ids.map(String));
-    const deletedCount = this.data.filter(row => idSet.has(String(row[this.idField]))).length;
+    const deletedCount = this.data().filter((row) => idSet.has(String(row[this.idField()]))).length;
 
     this.selectedIds.update((s) => {
       const next = new Set(s);
@@ -420,10 +445,10 @@ export class DataTableComponent implements OnInit, OnDestroy {
     column: string;
     direction?: string;
   }): Promise<AgentActionResult> {
-    if (!this.columns.includes(params.column)) {
+    if (!this.columns().includes(params.column)) {
       return {
         success: false,
-        message: `Column "${params.column}" not found. Available: ${this.columns.join(', ')}`,
+        message: `Column "${params.column}" not found. Available: ${this.columns().join(', ')}`,
       };
     }
     this.sortColumn.set(params.column);
@@ -432,10 +457,10 @@ export class DataTableComponent implements OnInit, OnDestroy {
   }
 
   private async doFilterBy(params: { column: string; value: string }): Promise<AgentActionResult> {
-    if (!this.columns.includes(params.column)) {
+    if (!this.columns().includes(params.column)) {
       return {
         success: false,
-        message: `Column "${params.column}" not found. Available: ${this.columns.join(', ')}`,
+        message: `Column "${params.column}" not found. Available: ${this.columns().join(', ')}`,
       };
     }
     this.filterColumn.set(params.column);
@@ -448,7 +473,7 @@ export class DataTableComponent implements OnInit, OnDestroy {
   }
 
   private async doSelectRow(params: { id: string }): Promise<AgentActionResult> {
-    const row = this.data.find((r) => String(r[this.idField]) === params.id);
+    const row = this.data().find((r) => String(r[this.idField()]) === params.id);
     if (!row) {
       return { success: false, message: `Row with ID "${params.id}" not found.` };
     }
@@ -465,10 +490,10 @@ export class DataTableComponent implements OnInit, OnDestroy {
     const selIds = [...this.selectedIds()];
     return {
       success: true,
-      message: `Table "${this.title}": ${this.filteredData().length} rows visible (${this.totalRows()} total)`,
+      message: `Table "${this.title()}": ${this.filteredData().length} rows visible (${this.totalRows()} total)`,
       data: {
-        title: this.title,
-        columns: this.columns,
+        title: this.title(),
+        columns: this.columns(),
         visibleRows: this.filteredData().length,
         totalRows: this.totalRows(),
         selectedIds: selIds,

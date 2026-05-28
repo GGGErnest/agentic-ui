@@ -1,11 +1,4 @@
-import {
-  Directive,
-  Input,
-  OnInit,
-  OnDestroy,
-  ElementRef,
-  inject,
-} from '@angular/core';
+import { Directive, effect, ElementRef, inject, input, OnDestroy } from '@angular/core';
 import { AgentWorldService } from '../core/world/agent-world.service';
 import { AgentAction } from '../core/world/agent-action.model';
 
@@ -29,36 +22,52 @@ import { AgentAction } from '../core/world/agent-action.model';
   selector: '[agentic]',
   standalone: true,
 })
-export class AgenticDirective implements OnInit, OnDestroy {
+export class AgenticDirective implements OnDestroy {
   private readonly world = inject(AgentWorldService);
   private readonly el = inject(ElementRef<HTMLElement>);
 
   /** Unique identifier for this component instance. Required. */
-  @Input({ required: true }) agenticId!: string;
+  readonly agenticId = input.required<string>();
 
   /** Semantic role of the component (e.g., 'DataTable', 'Modal', 'Button'). */
-  @Input() role: string = 'UI Component';
+  readonly role = input('UI Component');
 
   /** Actions this component exposes to the AI agent. */
-  @Input() actions: AgentAction[] = [];
+  readonly actions = input<AgentAction[]>([]);
 
   /** Arbitrary metadata for facade components. */
-  @Input() metadata: Record<string, unknown> = {};
+  readonly metadata = input<Record<string, unknown>>({});
 
-  ngOnInit(): void {
-    // Tag the element for IntersectionObserver
-    this.el.nativeElement.setAttribute('data-agentic-id', this.agenticId);
+  private registeredId: string | null = null;
 
-    this.world.register({
-      id: this.agenticId,
-      role: this.role,
-      actions: this.actions,
-      element: this.el.nativeElement,
-      metadata: this.metadata,
+  constructor() {
+    effect(() => {
+      const id = this.agenticId();
+      const role = this.role();
+      const actions = this.actions();
+      const metadata = this.metadata();
+
+      this.el.nativeElement.setAttribute('data-agentic-id', id);
+
+      if (this.registeredId && this.registeredId !== id) {
+        this.world.unregister(this.registeredId);
+      }
+
+      this.world.register({
+        id,
+        role,
+        actions,
+        element: this.el.nativeElement,
+        metadata,
+      });
+
+      this.registeredId = id;
     });
   }
 
   ngOnDestroy(): void {
-    this.world.unregister(this.agenticId);
+    if (this.registeredId) {
+      this.world.unregister(this.registeredId);
+    }
   }
 }

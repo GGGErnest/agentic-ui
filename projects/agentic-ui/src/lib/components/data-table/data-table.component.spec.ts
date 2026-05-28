@@ -4,46 +4,42 @@
  * sortBy, filterBy, selectRow, getSnapshot.
  */
 import { TestBed } from '@angular/core/testing';
-import { ApplicationRef } from '@angular/core';
-import { BehaviorSubject } from 'rxjs';
 import { DataTableComponent } from './data-table.component';
 import { AgentWorldService } from '../../core/world/agent-world.service';
 
 function createService(): AgentWorldService {
-  const appRef = {
-    isStable: new BehaviorSubject(true),
-    afterTick: new BehaviorSubject(void 0),
-    onStable: new BehaviorSubject(void 0),
-  } as unknown as ApplicationRef;
-
   TestBed.resetTestingModule();
   TestBed.configureTestingModule({
-    providers: [
-      AgentWorldService,
-      { provide: ApplicationRef, useValue: appRef },
-    ],
+    imports: [DataTableComponent],
+    providers: [AgentWorldService],
   });
   return TestBed.inject(AgentWorldService);
 }
 
 function createComponent(overrides: any = {}) {
-  const world = createService();
-  const comp = new DataTableComponent(world);
+  createService();
+  const fixture = TestBed.createComponent(DataTableComponent);
+  const comp = fixture.componentInstance;
+  const world = TestBed.inject(AgentWorldService);
 
-  (comp as any)['agenticId'] = overrides['agenticId'] ?? 'test-table';
-  (comp as any)['columns'] = overrides['columns'] ?? ['name', 'role', 'team'];
-  (comp as any)['idField'] = overrides['idField'] ?? 'id';
-  (comp as any)['data'] = overrides['data'] ?? [
-    { id: '1', name: 'Alice', role: 'Engineer', team: 'Frontend' },
-    { id: '2', name: 'Bob', role: 'Designer', team: 'Frontend' },
-    { id: '3', name: 'Charlie', role: 'Manager', team: 'Backend' },
-    { id: '4', name: 'Diana', role: 'Engineer', team: 'Backend' },
-    { id: '5', name: 'Eve', role: 'Engineer', team: 'Platform' },
-  ];
-  (comp as any)['title'] = overrides['title'] ?? 'Tasks';
+  // Set input values using setInput
+  fixture.componentRef.setInput('agenticId', overrides['agenticId'] ?? 'test-table');
+  fixture.componentRef.setInput('title', overrides['title'] ?? 'Tasks');
+  fixture.componentRef.setInput('columns', overrides['columns'] ?? ['name', 'role', 'team']);
+  fixture.componentRef.setInput(
+    'data',
+    overrides['data'] ?? [
+      { id: '1', name: 'Alice', role: 'Engineer', team: 'Frontend' },
+      { id: '2', name: 'Bob', role: 'Designer', team: 'Frontend' },
+      { id: '3', name: 'Charlie', role: 'Manager', team: 'Backend' },
+      { id: '4', name: 'Diana', role: 'Engineer', team: 'Backend' },
+      { id: '5', name: 'Eve', role: 'Engineer', team: 'Platform' },
+    ],
+  );
+  fixture.componentRef.setInput('idField', overrides['idField'] ?? 'id');
 
-  comp.ngOnInit();
-  return { comp, world };
+  fixture.detectChanges();
+  return { comp, world, fixture };
 }
 
 function getAction(comp: DataTableComponent, name: string) {
@@ -54,7 +50,12 @@ describe('DataTableComponent', () => {
   it('registers in World Registry', () => {
     const { world } = createComponent();
     expect(world.entries().get('test-table')!.role).toBe('DataTable');
-    expect(world.entries().get('test-table')!.actions.find(a => a.name === 'findRow')).toBeDefined();
+    expect(
+      world
+        .entries()
+        .get('test-table')!
+        .actions.find((a) => a.name === 'findRow'),
+    ).toBeDefined();
   });
 
   it('unregisters on destroy', () => {
@@ -84,7 +85,7 @@ describe('DataTableComponent', () => {
   it('bulkEdit: edits multiple rows', async () => {
     const { comp } = createComponent();
     await getAction(comp, 'bulkEdit').execute({ ids: ['1', '2'], changes: { team: 'Mobile' } });
-    expect(comp['data'].find((r: any) => r['id'] === '1')!['team']).toBe('Mobile');
+    expect(comp.data().find((r: any) => r['id'] === '1')!['team']).toBe('Mobile');
   });
 
   it('bulkEdit: rejects empty IDs', async () => {
@@ -101,9 +102,9 @@ describe('DataTableComponent', () => {
 
   it('bulkDelete: removes rows', async () => {
     const { comp } = createComponent();
-    const before = comp['data'].length;
+    const before = comp.data().length;
     await getAction(comp, 'bulkDelete').execute({ ids: ['1', '3'] });
-    expect(comp['data'].length).toBe(before);
+    expect(comp.data().length).toBe(before);
   });
 
   it('bulkDelete: emits rowsDeleted event', async () => {

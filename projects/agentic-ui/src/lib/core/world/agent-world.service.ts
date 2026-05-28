@@ -1,10 +1,10 @@
-import { Injectable, signal, computed, ApplicationRef, inject, DestroyRef } from '@angular/core';
+import { ApplicationRef, computed, DestroyRef, inject, Injectable, signal } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { BehaviorSubject, firstValueFrom } from 'rxjs';
 import { filter } from 'rxjs/operators';
-import { WorldEntry, WorldSnapshot, ToolDefinition, SnapshotConfig } from './world-entry.interface';
-import { AgentAction, AgentActionResult, ActionParameter } from './agent-action.model';
 import { AgentApprovalService } from '../approval/agent-approval.service';
+import { ActionParameter, AgentActionResult } from './agent-action.model';
+import { SnapshotConfig, ToolDefinition, WorldEntry, WorldSnapshot } from './world-entry.interface';
 
 /**
  * AgentWorldService — the "Sensory Cortex" of the Agentic-UI framework.

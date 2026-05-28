@@ -151,16 +151,20 @@ describe('AgentHarness', () => {
     });
 
     it('should dispatch tool calls to the World Registry', async () => {
-      vi.mocked(mockLLM.getStream).mockReturnValue(new AsyncIterableChunks([
-        { type: 'thought', text: 'I should add a task.' },
-        {
-          type: 'tool_call',
-          data: {
-            id: 'call_1',
-            function: { name: 'add-btn__addTask', arguments: '{"title":"New task"}' },
+      vi.mocked(mockLLM.getStream)
+        .mockImplementationOnce(() => new AsyncIterableChunks([
+          { type: 'thought', text: 'I should add a task.' },
+          {
+            type: 'tool_call',
+            data: {
+              id: 'call_1',
+              function: { name: 'add-btn__addTask', arguments: '{"title":"New task"}' },
+            },
           },
-        },
-      ]));
+        ]))
+        .mockImplementation(() => new AsyncIterableChunks([
+          { type: 'thought', text: 'No more actions.' },
+        ]));
 
       await harness.runCycle('Add a task called "New task"');
 
@@ -168,23 +172,28 @@ describe('AgentHarness', () => {
     });
 
     it('should record steps with action and result', async () => {
-      vi.mocked(mockLLM.getStream).mockReturnValue(new AsyncIterableChunks([
-        { type: 'thought', text: 'Adding task...' },
-        {
-          type: 'tool_call',
-          data: {
-            id: 'call_1',
-            function: { name: 'add-btn__addTask', arguments: '{"title":"test"}' },
+      vi.mocked(mockLLM.getStream)
+        .mockImplementationOnce(() => new AsyncIterableChunks([
+          { type: 'thought', text: 'Adding task...' },
+          {
+            type: 'tool_call',
+            data: {
+              id: 'call_1',
+              function: { name: 'add-btn__addTask', arguments: '{"title":"test"}' },
+            },
           },
-        },
-      ]));
+        ]))
+        .mockImplementation(() => new AsyncIterableChunks([
+          { type: 'thought', text: 'No more actions.' },
+        ]));
 
       await harness.runCycle('Add test');
 
       const steps = harness.steps();
-      expect(steps).toHaveLength(1);
+      expect(steps).toHaveLength(2);
       expect(steps[0].action).toContain('addTask');
       expect(steps[0].result).toContain('Task added');
+      expect(steps[1].result).toContain('No action taken');
     });
 
     it('should dispatch multiple tool calls in sequence', async () => {
@@ -199,29 +208,33 @@ describe('AgentHarness', () => {
         }],
       });
 
-      vi.mocked(mockLLM.getStream).mockReturnValue(new AsyncIterableChunks([
-        { type: 'thought', text: 'I need to do two things.' },
-        {
-          type: 'tool_call',
-          data: {
-            id: 'call_1',
-            function: { name: 'add-btn__addTask', arguments: '{}' },
+      vi.mocked(mockLLM.getStream)
+        .mockImplementationOnce(() => new AsyncIterableChunks([
+          { type: 'thought', text: 'I need to do two things.' },
+          {
+            type: 'tool_call',
+            data: {
+              id: 'call_1',
+              function: { name: 'add-btn__addTask', arguments: '{}' },
+            },
           },
-        },
-        {
-          type: 'tool_call',
-          data: {
-            id: 'call_2',
-            function: { name: 'btn-2__click', arguments: '{}' },
+          {
+            type: 'tool_call',
+            data: {
+              id: 'call_2',
+              function: { name: 'btn-2__click', arguments: '{}' },
+            },
           },
-        },
-      ]));
+        ]))
+        .mockImplementation(() => new AsyncIterableChunks([
+          { type: 'thought', text: 'No more actions.' },
+        ]));
 
       await harness.runCycle('Do both');
 
       expect(executeSpy).toHaveBeenCalled();
       expect(executeClick).toHaveBeenCalled();
-      expect(harness.steps()).toHaveLength(2);
+      expect(harness.steps()).toHaveLength(3);
     });
   });
 
@@ -242,15 +255,19 @@ describe('AgentHarness', () => {
         }],
       });
 
-      vi.mocked(mockLLM.getStream).mockReturnValue(new AsyncIterableChunks([
-        {
-          type: 'tool_call',
-          data: {
-            id: 'call_1',
-            function: { name: 'btn__click', arguments: '{}' },
+      vi.mocked(mockLLM.getStream)
+        .mockImplementationOnce(() => new AsyncIterableChunks([
+          {
+            type: 'tool_call',
+            data: {
+              id: 'call_1',
+              function: { name: 'btn__click', arguments: '{}' },
+            },
           },
-        },
-      ]));
+        ]))
+        .mockImplementation(() => new AsyncIterableChunks([
+          { type: 'thought', text: 'No more actions.' },
+        ]));
 
       // Start the cycle — it will block waiting for stability
       const cyclePromise = harness.runCycle('Click');
@@ -259,7 +276,7 @@ describe('AgentHarness', () => {
       setTimeout(() => stable$.next(true), 50);
 
       await cyclePromise;
-      expect(harness.steps()).toHaveLength(1);
+      expect(harness.steps()).toHaveLength(2);
     });
   });
 
@@ -402,16 +419,20 @@ describe('AgentHarness', () => {
         }],
       });
 
-      vi.mocked(mockLLM.getStream).mockReturnValue(new AsyncIterableChunks([
-        { type: 'thought', text: 'I will delete.' },
-        {
-          type: 'tool_call',
-          data: {
-            id: 'call_1',
-            function: { name: 'delete-btn__delete', arguments: '{}' },
+      vi.mocked(mockLLM.getStream)
+        .mockImplementationOnce(() => new AsyncIterableChunks([
+          { type: 'thought', text: 'I will delete.' },
+          {
+            type: 'tool_call',
+            data: {
+              id: 'call_1',
+              function: { name: 'delete-btn__delete', arguments: '{}' },
+            },
           },
-        },
-      ]));
+        ]))
+        .mockImplementation(() => new AsyncIterableChunks([
+          { type: 'thought', text: 'No more actions.' },
+        ]));
 
       // Start cycle — it will block on approval
       const cyclePromise = harness.runCycle('Delete');
@@ -427,7 +448,7 @@ describe('AgentHarness', () => {
       await cyclePromise;
       expect(approval.isPending()).toBe(false);
       const steps = harness.steps();
-      expect(steps).toHaveLength(1);
+      expect(steps).toHaveLength(2);
       expect(steps[0].result).toContain('Deleted');
     });
 
@@ -445,15 +466,19 @@ describe('AgentHarness', () => {
         }],
       });
 
-      vi.mocked(mockLLM.getStream).mockReturnValue(new AsyncIterableChunks([
-        {
-          type: 'tool_call',
-          data: {
-            id: 'call_1',
-            function: { name: 'delete-btn__delete', arguments: '{}' },
+      vi.mocked(mockLLM.getStream)
+        .mockImplementationOnce(() => new AsyncIterableChunks([
+          {
+            type: 'tool_call',
+            data: {
+              id: 'call_1',
+              function: { name: 'delete-btn__delete', arguments: '{}' },
+            },
           },
-        },
-      ]));
+        ]))
+        .mockImplementation(() => new AsyncIterableChunks([
+          { type: 'thought', text: 'No more actions.' },
+        ]));
 
       const cyclePromise = harness.runCycle('Delete');
       await new Promise(r => setTimeout(r, 20));
@@ -463,7 +488,7 @@ describe('AgentHarness', () => {
 
       await cyclePromise;
       const steps = harness.steps();
-      expect(steps).toHaveLength(1);
+      expect(steps).toHaveLength(2);
       expect(steps[0].result).toContain('rejected');
     });
   });

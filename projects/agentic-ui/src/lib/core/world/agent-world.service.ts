@@ -67,6 +67,19 @@ export class AgentWorldService {
 
   /** Register a component in the world. Called by [agentic] directive on init. */
   register(entry: WorldEntry): void {
+    // Assert OpenAI schema specifications ^[a-zA-Z0-9_-]{1,64}$ and block custom nested namespace errors
+    const SCHEMA_RULE = /^[a-zA-Z0-9_-]{1,64}$/;
+    
+    if (!SCHEMA_RULE.test(entry.id) || entry.id.includes('__')) {
+      throw new Error(`[Agentic-UI Verification Error] component structural mismatch: ID "${entry.id}" must match strict naming conventions: alphanumeric, dashes, underscores only up to 64 chars, and cannot contain double underscores "__".`);
+    }
+    
+    for (const item of entry.actions) {
+      if (!SCHEMA_RULE.test(item.name) || item.name.includes('__')) {
+        throw new Error(`[Agentic-UI Verification Error] Action naming constraint failure: Action key "${item.name}" bound to "${entry.id}" contains illegal tokens.`);
+      }
+    }
+
     this._entries.update((map) => {
       const next = new Map(map);
       next.set(entry.id, entry);
@@ -179,29 +192,68 @@ export class AgentWorldService {
     const maxContextLen = config.maxContextLen ?? 2000;
     const prioritySet = new Set(config.priorityRoles ?? []);
 
-    const active = this.activeEntries();
+    // Expose all items to prevent the LLM from missing out-of-view targets
+    const allEntries = this._entries();
+    const visibleIds = this.visibleIds();
 
     // Sort: priority roles first, then rest
-    const sorted = [...active.entries()].sort(([, a], [, b]) => {
+    const sorted = [...allEntries.entries()].sort(([, a], [, b]) => {
       const aPrio = prioritySet.has(a.role) ? 1 : 0;
       const bPrio = prioritySet.has(b.role) ? 1 : 0;
       return bPrio - aPrio;
     });
 
-    const entries: { id: string; role: string; actions: string[] }[] = [];
+    // Scan for any active modal or overlay that is currently visible in the viewport
+    const activeModalEntry = sorted.find(([, entry]) =>
+      (entry.role === 'Modal' || entry.role === 'Overlay' || entry.role === 'Dialog') && visibleIds.has(entry.id)
+    );
+
+    const entries: { id: string; role: string; isVisible: boolean; isOccluded: boolean; actions: string[] }[] = [];
+    const interactiveEntriesMap = new Map<string, WorldEntry>();
+
     for (const [id, entry] of sorted) {
+      let isOccluded = false;
+
+      // If a modal layer exists, evaluate whether this element is trapped behind it
+      if (activeModalEntry && activeModalEntry[1].id !== id) {
+        const modalElement = activeModalEntry[1].element;
+        const targetElement = entry.element;
+
+        if (modalElement && targetElement) {
+          // If the element is NOT part of the modal's DOM tree, it is occluded by the backdrop
+          isOccluded = !modalElement.contains(targetElement);
+        } else if (modalElement) {
+          // Modal has an element but target doesn't — treat target as occluded
+          isOccluded = true;
+        }
+        // If neither has an element (no DOM), skip occlusion — can't verify
+      }
+
+      const isVisible = visibleIds.has(id);
       entries.push({
         id,
         role: entry.role,
+        isVisible: isVisible,
+        isOccluded: isOccluded,
         actions: entry.actions.map((a) => a.name),
       });
+
+      // Only allow tool generation if the component is visible AND not blocked by an overlay
+      if (isVisible && !isOccluded) {
+        interactiveEntriesMap.set(id, entry);
+      }
     }
 
     let context =
       entries.length === 0
-        ? 'No interactive components are currently visible.'
-        : 'Visible interactive components:\n' +
-          entries.map((e) => `  [${e.id}] ${e.role} — actions: ${e.actions.join(', ')}`).join('\n');
+        ? 'No interactive components exist on this page.'
+        : 'Interactive components on the page:\n' +
+          entries.map((e) => {
+            const status = e.isOccluded
+              ? 'Occluded/Inert - Blocked by Modal Overlay'
+              : `Visible In Viewport: ${e.isVisible}`;
+            return `  [${e.id}] ${e.role} (${status}) — actions: ${e.actions.join(', ')}`;
+          }).join('\n');
 
     // Truncate context if over budget
     const truncationSuffix = '\n... (additional entries truncated)';
@@ -210,8 +262,11 @@ export class AgentWorldService {
       context = truncated + truncationSuffix;
     }
 
-    // Build tools with budget cap (respecting priority order)
-    const tools = this.buildToolDefinitions(new Map(sorted), maxTools);
+    // Build tools using only the accessible, unoccluded components
+    const tools = this.buildToolDefinitions(
+      interactiveEntriesMap,
+      maxTools,
+    );
 
     return { context, tools };
   }

@@ -77,20 +77,26 @@ describe('AgentApprovalService', () => {
       expect(service.isPending()).toBe(false);
     });
 
-    it('should only have one pending ticket at a time', async () => {
+    it('should queue tickets and process in FIFO order', async () => {
       const promise1 = service.requestApproval('a', 'A', 'x', 'X');
-      const firstTicket = service.pending();
-
       const promise2 = service.requestApproval('b', 'B', 'y', 'Y');
 
-      // Second call overwrites first
+      // Queue holds both tickets, first is 'a' at front
       expect(service.pending()).not.toBeNull();
-      expect(service.pending()!.entryId).toBe('b');
+      expect(service.pending()!.entryId).toBe('a');
+      expect(service.isPending()).toBe(true);
 
-      // First promise is abandoned but not leaked — let's clean up
+      // Reject first ticket — queue shifts, 'b' becomes front
       service.reject();
-      await promise2;
-      // promise1 is forgotten (GC'd), but no crash
+      expect(service.pending()!.entryId).toBe('b');
+      expect(service.isPending()).toBe(true);
+
+      // Resolve second
+      service.reject();
+      
+      await promise1.catch(() => {});
+      await promise2.catch(() => {});
+      expect(service.isPending()).toBe(false);
     });
 
     it('should handle approve with no pending ticket gracefully', () => {

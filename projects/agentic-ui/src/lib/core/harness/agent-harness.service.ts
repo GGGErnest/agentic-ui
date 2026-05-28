@@ -81,10 +81,12 @@ export class AgentHarness {
 
   /** Export the full conversation state for persistence. */
   exportConversation(): ConversationHistory {
+    // Slit and cap indices to avoid blowing past 5MB system web storage limits
+    const BOUNDARY_LIMIT = 15;
     return {
       systemPrompt: this.systemPrompt,
-      messages: [...this.messages],
-      steps: [...this.steps()],
+      messages: this.messages.slice(-BOUNDARY_LIMIT),
+      steps: this.steps().slice(-BOUNDARY_LIMIT),
     };
   }
 
@@ -120,10 +122,18 @@ export class AgentHarness {
       // Add user message to history
       this.messages.push({ role: 'user', content: userPrompt });
 
-      // Get world snapshot for perception
-      const snapshot = this.world.snapshot();
+      let cycleCount = 0;
+      const MAX_CYCLES = 5;
+      let hasNextStep = true;
 
-      // Per-call AbortController (merged with external signal if provided)
+      while (hasNextStep && cycleCount < MAX_CYCLES) {
+        cycleCount++;
+        hasNextStep = false; // Loop terminates unless new tool dispatches occur
+
+        // Get world snapshot for perception
+        const snapshot = this.world.snapshot();
+
+        // Per-call AbortController (merged with external signal if provided)
       const abort = new AbortController();
       if (config.signal) {
         config.signal.addEventListener('abort', () => abort.abort());
@@ -175,8 +185,8 @@ export class AgentHarness {
       // Dispatch tool calls (capped by maxSteps)
       const dispatchable = toolCalls.slice(0, maxSteps);
       for (const toolCall of dispatchable) {
-        // Wait for UI stability before acting (with timeout)
-        await this.waitForStableWithTimeout(5_000);
+        // Optimized check timeout threshold from 5s down to 500ms to ignore websocket / polling blocks
+        await this.waitForStableWithTimeout(500);
 
         const { entryId, actionName } = this.parseToolName(toolCall.function.name);
         let args: Record<string, unknown> = {};
@@ -197,18 +207,24 @@ export class AgentHarness {
           },
         ]);
 
+        // Trim payload payload length down to a maximum threshold limit before sending across to prompt buffer
+        let serializedResult = JSON.stringify(result);
+        if (serializedResult.length > 2500) {
+          serializedResult = serializedResult.substring(0, 2500) + '... [OUTPUT TRUNCATED FOR TOKEN CONTEXT SAFETY]';
+        }
+
         // Add tool result to conversation
         this.messages.push({
           role: 'tool',
-          content: JSON.stringify(result),
+          content: serializedResult,
           tool_call_id: toolCall.id,
         });
 
-        // Wait for UI stability after action (with timeout)
-        await this.waitForStableWithTimeout(5_000);
+        // Short tracking validation buffer to maintain speed velocity
+        await this.waitForStableWithTimeout(500);
       }
 
-      // If no tool calls, the agent is done
+      // If no tool calls, the agent is done, break the while loop
       if (dispatchable.length === 0) {
         this.steps.update(s => [
           ...s,
@@ -219,7 +235,14 @@ export class AgentHarness {
             timestamp: Date.now(),
           },
         ]);
+        break; 
+      } else {
+        // Tools were executed, continue loop to let LLM observe observation results
+        hasNextStep = true;
+        this.thought.set(''); // Reset temporary string buffer for the next iteration turn
       }
+
+      } // <-- END OF REACT WHILE LOOP
     } catch (error) {
       this.steps.update(s => [
         ...s,

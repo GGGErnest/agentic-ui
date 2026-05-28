@@ -7,7 +7,7 @@
  *
  * Only one ticket at a time — sequential approval queue.
  */
-import { Injectable, signal } from '@angular/core';
+import { Injectable, signal, computed } from '@angular/core';
 
 export interface ApprovalTicket {
   id: string;
@@ -21,11 +21,14 @@ export interface ApprovalTicket {
 
 @Injectable({ providedIn: 'root' })
 export class AgentApprovalService {
-  /** Current pending approval, or null when idle. */
-  readonly pending = signal<ApprovalTicket | null>(null);
+  /** Internal queue array tracking sequential tickets */
+  private readonly queue = signal<ApprovalTicket[]>([]);
 
-  /** Whether a ticket is currently awaiting user decision. */
-  readonly isPending = signal<boolean>(false);
+  /** Current active pending approval target at front of queue */
+  readonly pending = computed(() => this.queue()[0] || null);
+
+  /** True when any authorization payload is unresolved */
+  readonly isPending = computed(() => this.queue().length > 0);
 
   /** Internal: request user approval. Returns Promise that resolves true/false. */
   requestApproval(
@@ -45,8 +48,7 @@ export class AgentApprovalService {
         params,
         resolve,
       };
-      this.pending.set(ticket);
-      this.isPending.set(true);
+      this.queue.update(items => [...items, ticket]);
     });
   }
 
@@ -61,10 +63,13 @@ export class AgentApprovalService {
   }
 
   private resolveCurrent(approved: boolean, message: string): void {
-    const ticket = this.pending();
-    if (!ticket) return;
+    const items = this.queue();
+    if (items.length === 0) return;
+    
+    const ticket = items[0];
     ticket.resolve(approved);
-    this.pending.set(null);
-    this.isPending.set(false);
+    
+    // Shift queue forward to resolve memory leakage and blockages
+    this.queue.update(list => list.slice(1));
   }
 }

@@ -1,0 +1,12 @@
+<div
+  class="demo-toolbar"
+  agentic
+  agenticId="task-toolbar"
+  role="Toolbar"
+  [actions]="toolbarActions"
+>
+  <button type="button" class="btn btn-primary" (click)="addClicked.emit()">Add Task</button>
+  <button type="button" class="btn btn-danger" [disabled]="selectedCount() === 0" (click)="deleteSelectedClicked.emit()">Delete Selected</button>
+  <button type="button" class="btn btn-secondary" (click)="clearFiltersClicked.emit()">Clear Filters</button>
+  <span class="demo-stats">{{ taskCount() }} tasks · {{ selectedCount() }} selected</span>
+</div>

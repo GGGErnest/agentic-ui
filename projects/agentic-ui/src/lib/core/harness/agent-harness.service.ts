@@ -11,6 +11,12 @@ export interface AgentStep {
   timestamp: number;
 }
 
+export interface ChatTurn {
+  userMessage: string;
+  steps: AgentStep[];
+  timestamp: number;
+}
+
 /** Per-cycle configuration overrides. */
 export interface RunCycleConfig {
   /** Max milliseconds before the cycle is aborted. Default: 60_000. */
@@ -52,6 +58,9 @@ export class AgentHarness {
 
   /** History of completed steps for the UI. */
   readonly steps = signal<AgentStep[]>([]);
+
+  /** Chat turns (user message + agent steps) for the UI. */
+  readonly chatTurns = signal<ChatTurn[]>([]);
 
   /** Whether the agent is currently running a cycle. */
   readonly isRunning = signal<boolean>(false);
@@ -186,7 +195,6 @@ export class AgentHarness {
           return;
         }
 
-        // If the LLM produced thought text, record it
         const thoughtText = this.thought();
         if (thoughtText) {
           this.messages.push({ role: 'assistant', content: thoughtText });

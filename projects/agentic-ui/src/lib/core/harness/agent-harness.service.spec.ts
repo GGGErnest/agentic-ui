@@ -94,6 +94,10 @@ describe('AgentHarness', () => {
     it('should not be running', () => {
       expect(harness.isRunning()).toBe(false);
     });
+
+    it('should start with empty chatTurns', () => {
+      expect(harness.chatTurns()).toEqual([]);
+    });
   });
 
   // ========== System Prompt ==========

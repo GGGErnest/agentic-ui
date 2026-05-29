@@ -1,19 +1,15 @@
 import {
   Component,
   computed,
-  effect,
   EventEmitter,
-  inject,
-  Injector,
   input,
-  OnDestroy,
-  OnInit,
   Output,
   signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AgentAction, AgentActionResult } from '../../core/world/agent-action.model';
-import { AgentWorldService } from '../../core/world/agent-world.service';
+import { AGENTIC_COMPONENT } from '../../core/world/agentic-component.token';
+import { AgenticDirective } from '../../directives/agentic.directive';
 import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.models';
 
 /**
@@ -35,9 +31,10 @@ import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.mod
 @Component({
   selector: 'agui-data-table',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, AgenticDirective],
+  providers: [{ provide: AGENTIC_COMPONENT, useExisting: DataTableComponent }],
   template: `
-    <div class="data-table" [attr.data-agentic-id]="agenticId()">
+    <div class="data-table" agentic [agenticId]="agenticId()">
       <div class="data-table__toolbar">
         <span class="data-table__title">{{ title() }}</span>
         <span class="data-table__count">{{ filteredData().length }} / {{ totalRows() }} rows</span>
@@ -144,18 +141,26 @@ import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.mod
     `,
   ],
 })
-export class DataTableComponent implements OnInit, OnDestroy {
-  private readonly world: AgentWorldService;
-  private readonly injector = inject(Injector);
-  private registeredId: string | null = null;
-
-  constructor(world?: AgentWorldService) {
-    this.world = world ?? inject(AgentWorldService);
-  }
+export class DataTableComponent {
 
   // ---- Inputs ----
 
   readonly agenticId = input.required<string>();
+  readonly agenticRole = 'DataTable';
+
+  get agenticActions(): AgentAction[] {
+    return this._agenticActions;
+  }
+
+  get agenticMetadata(): Record<string, unknown> {
+    return {
+      columns: this.columns(),
+      totalRows: this.data().length,
+      idField: this.idField(),
+      facadeType: 'DataTable',
+    };
+  }
+
   readonly title = input('Data Table');
   readonly columns = input.required<string[]>();
   readonly data = input.required<DataRow[]>();
@@ -213,7 +218,7 @@ export class DataTableComponent implements OnInit, OnDestroy {
 
   // ---- Agentic Actions (Facade API) ----
 
-  private readonly agenticActions: AgentAction[] = [
+  private readonly _agenticActions: AgentAction[] = [
     {
       name: 'findRow',
       description: 'Find rows matching a column value. Returns matching rows.',
@@ -278,47 +283,6 @@ export class DataTableComponent implements OnInit, OnDestroy {
       execute: () => this.doGetSnapshot(),
     },
   ];
-
-  // ---- Lifecycle ----
-
-  ngOnInit(): void {
-    // Reactive world registration: re-register whenever signals change
-    effect(
-      () => {
-        const id = this.agenticId();
-        const columns = this.columns();
-        const data = this.data();
-        const idField = this.idField();
-
-        // Unregister previous ID if it changed
-        if (this.registeredId && this.registeredId !== id) {
-          this.world.unregister(this.registeredId);
-        }
-
-        // Register the new snapshot
-        this.world.register({
-          id,
-          role: 'DataTable',
-          actions: this.agenticActions,
-          metadata: {
-            columns,
-            totalRows: data.length,
-            idField,
-            facadeType: 'DataTable',
-          },
-        });
-
-        this.registeredId = id;
-      },
-      { injector: this.injector },
-    );
-  }
-
-  ngOnDestroy(): void {
-    if (this.registeredId) {
-      this.world.unregister(this.registeredId);
-    }
-  }
 
   // ---- UI helpers ----
 

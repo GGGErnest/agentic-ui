@@ -43,24 +43,21 @@ function createComponent(overrides: any = {}) {
 }
 
 function getAction(comp: DataTableComponent, name: string) {
-  return comp['agenticActions'].find((a: any) => a.name === name)!;
+  return comp.agenticActions.find((a: any) => a.name === name)!;
 }
 
 describe('DataTableComponent', () => {
-  it('registers in World Registry', () => {
+  it('registers in World Registry via directive', () => {
     const { world } = createComponent();
-    expect(world.entries().get('test-table')!.role).toBe('DataTable');
-    expect(
-      world
-        .entries()
-        .get('test-table')!
-        .actions.find((a) => a.name === 'findRow'),
-    ).toBeDefined();
+    const entry = world.entries().get('test-table');
+    expect(entry).toBeDefined();
+    expect(entry!.role).toBe('DataTable');
+    expect(entry!.actions.find((a) => a.name === 'findRow')).toBeDefined();
   });
 
-  it('unregisters on destroy', () => {
-    const { comp, world } = createComponent();
-    comp.ngOnDestroy();
+  it('unregisters on destroy via directive', () => {
+    const { fixture, world } = createComponent();
+    fixture.destroy();
     expect(world.entries().has('test-table')).toBe(false);
   });
 

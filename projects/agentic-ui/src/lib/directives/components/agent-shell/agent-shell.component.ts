@@ -16,7 +16,7 @@ declare global {
   }
 }
 import { CommonModule } from '@angular/common';
-import { AgentHarness, AgentStep } from '../../../core/harness/agent-harness.service';
+import { AgentHarness, AgentStep, ChatTurn } from '../../../core/harness/agent-harness.service';
 import { AgentWorldService } from '../../../core/world/agent-world.service';
 import { AgentApprovalDialogComponent } from '../../../components/approval-dialog/agent-approval-dialog.component';
 
@@ -61,35 +61,39 @@ import { AgentApprovalDialogComponent } from '../../../components/approval-dialo
           </div>
 
           <div class="agent-shell__steps" #stepsContainer>
-            <div class="agent-shell__steps-label">Activity Stack</div>
-            
-            @if (!harness.isRunning() && harness.steps().length === 0 && !harness.thought()) {
+            <div class="agent-shell__steps-label">Chat Thread</div>
+
+            @if (!harness.isRunning() && harness.chatTurns().length === 0 && !harness.thought()) {
               <div class="agent-shell__empty-state">
                 <p>System idle. Issue a statement or use a suggestion chip below to start.</p>
               </div>
             }
 
-            @if (harness.isRunning() && harness.steps().length === 0 && !harness.thought()) {
+            @if (harness.isRunning() && harness.chatTurns().length === 0 && !harness.thought()) {
               <div class="agent-shell__loading-state">
                 <div class="spinner-ring"></div>
                 <p>Contacting proxy gateway & compiling structural context...</p>
               </div>
             }
 
-            @for (step of harness.steps(); track step.timestamp) {
-              <div class="agent-shell__step" [class.failed]="step.result && step.result.toLowerCase().includes('error')">
-                <div class="agent-shell__step-header">
-                  <span class="agent-shell__step-action">
-                    {{ step.action ? '⚙️ ' + step.action : '🧠 General Reasoning Task' }}
-                  </span>
-                  <span class="agent-shell__step-status" [class.success]="step.result && !step.result.toLowerCase().includes('error')">
-                    {{ step.result ? (step.result.includes('Error') || step.result.includes('rejected') ? '✗ Failed' : '✓ Completed') : '' }}
-                  </span>
+            @for (turn of harness.chatTurns(); track turn.timestamp) {
+              <div class="agent-shell__user-message">{{ turn.userMessage }}</div>
+
+              @for (step of turn.steps; track step.timestamp) {
+                <div class="agent-shell__step" [class.failed]="step.result && step.result.toLowerCase().includes('error')">
+                  <div class="agent-shell__step-header">
+                    <span class="agent-shell__step-action">
+                      {{ step.action ? '⚙️ ' + step.action : '🧠 General Reasoning Task' }}
+                    </span>
+                    <span class="agent-shell__step-status" [class.success]="step.result && !step.result.toLowerCase().includes('error')">
+                      {{ step.result ? (step.result.includes('Error') || step.result.includes('rejected') ? '✗ Failed' : '✓ Completed') : '' }}
+                    </span>
+                  </div>
+                  @if (step.result) {
+                    <div class="agent-shell__step-result">{{ step.result }}</div>
+                  }
                 </div>
-                @if (step.result) {
-                  <div class="agent-shell__step-result">{{ step.result }}</div>
-                }
-              </div>
+              }
             }
 
             @if (harness.thought(); as liveThought) {
@@ -188,8 +192,19 @@ import { AgentApprovalDialogComponent } from '../../../components/approval-dialo
     .agent-shell__thought-label { font-size: 11px; color: #58a6ff; margin-bottom: 4px; }
     .agent-shell__thought-text { font-size: 13px; color: #c9d1d9; line-height: 1.5; white-space: pre-wrap; }
 
-    .agent-shell__steps { flex: 1; overflow-y: auto; padding: 8px; }
+    .agent-shell__steps { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; }
     .agent-shell__steps-label { font-size: 11px; color: #8b949e; padding: 4px 8px 8px; }
+    .agent-shell__user-message {
+      align-self: flex-end;
+      background: #1f6feb;
+      color: #e6edf3;
+      border-radius: 12px 12px 2px 12px;
+      padding: 8px 12px;
+      font-size: 13px;
+      max-width: 85%;
+      margin-bottom: 8px;
+      word-break: break-word;
+    }
     .agent-shell__step {
       background: #161b22; border: 1px solid #21262d; border-radius: 8px;
       padding: 8px 12px; margin-bottom: 8px;
@@ -363,6 +378,7 @@ export class AgentShellComponent implements OnInit, OnDestroy {
   constructor() {
     // Reactive Auto-Scrolling Effect tracking step history logs and thought streams
     effect(() => {
+      this.harness.chatTurns();
       this.harness.steps();
       this.harness.thought();
       this.scrollToBottom();

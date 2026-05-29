@@ -1,9 +1,4 @@
-import {
-  LLMProvider,
-  LLMMessage,
-  LLMStreamChunk,
-  ToolCall,
-} from '../../core/harness/llm-provider.interface';
+import { LLMMessage, LLMProvider, LLMStreamChunk } from '../../core/harness/llm-provider.interface';
 import { ToolDefinition } from '../../core/world/world-entry.interface';
 
 /**
@@ -157,10 +152,18 @@ If no action is needed, explain why. Be precise with tool arguments.`,
               }
             }
 
-            // Text content: treat as thought (transparent reasoning)
+            // Captures native o1/o3-mini/DeepSeek reasoning streams explicitly
+            if (delta.reasoning_content) {
+              yield { type: 'thought', text: delta.reasoning_content };
+            }
+
+            // Text content: treat as public content if no tools are actively processing,
+            // otherwise handle as standard conversational chain reasoning tokens
             if (delta.content) {
-              thoughtText += delta.content;
-              yield { type: 'thought', text: delta.content };
+              yield {
+                type: delta.tool_calls || toolCalls.size > 0 ? 'thought' : 'content',
+                text: delta.content,
+              };
             }
           } catch {
             // Skip malformed SSE chunks

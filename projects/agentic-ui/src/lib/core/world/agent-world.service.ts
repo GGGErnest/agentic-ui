@@ -1,6 +1,6 @@
-import { ApplicationRef, computed, DestroyRef, inject, Injectable, signal } from '@angular/core';
+import { Injectable, signal, computed, ApplicationRef, inject, DestroyRef, afterEveryRender } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { BehaviorSubject, firstValueFrom } from 'rxjs';
+import { BehaviorSubject, firstValueFrom, Subject } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { AgentApprovalService } from '../approval/agent-approval.service';
 import { ActionParameter, AgentActionResult } from './agent-action.model';
@@ -56,7 +56,7 @@ export class AgentWorldService {
   readonly isStable = signal<boolean>(true);
 
   // ---- Stability tracking ----
-  private readonly stable$ = new BehaviorSubject<boolean>(true);
+  private readonly renderComplete$ = new Subject<void>();
 
   constructor() {
     this.setupIntersectionObserver();
@@ -299,16 +299,26 @@ export class AgentWorldService {
   }
 
   private setupStabilityTracking(): void {
-    this.appRef.isStable.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((stable) => {
-      this.isStable.set(stable);
-      this.stable$.next(stable);
+    // Register Angular's modern post-render hook to capture the exact moment 
+    // that layout change detection updates finish painting to the browser DOM tree.
+    // Executing inside the constructor establishes the correct injection context natively.
+    afterEveryRender(() => {
+      this.isStable.set(true);
+      this.renderComplete$.next();
     });
   }
 
-  /** Wait until the Angular application is stable. Used by the harness. */
+  /** Wait until the next global Angular rendering wave finishes committing and painting to the DOM. */
   async waitForStable(): Promise<void> {
-    if (this.appRef.isStable) return;
-    await firstValueFrom(this.stable$.pipe(filter((s) => s)));
+    this.isStable.set(false);
+    
+    // Wait for the next framework paint loop iteration to finalize
+    await firstValueFrom(this.renderComplete$);
+    
+    // Crucial: Yield control to the browser macro-task queue once. This guarantees that 
+    // asynchronous IntersectionObserver callbacks execute and update visibility states 
+    // immediately after the element is painted on screen.
+    await new Promise(resolve => setTimeout(resolve, 0));
   }
 
   private buildToolDefinitions(
@@ -346,11 +356,21 @@ export class AgentWorldService {
     const required: string[] = [];
 
     for (const p of params) {
-      properties[p.name] = {
+      const fieldSchema: Record<string, unknown> = {
         type: p.type,
         description: p.description,
-        ...(p.enum ? { enum: p.enum } : {}),
       };
+
+      if (p.enum) {
+        fieldSchema['enum'] = p.enum;
+      }
+
+      // If type is an array, explicitly specify string items for high-performance extraction compliance
+      if (p.type === 'array') {
+        fieldSchema['items'] = { type: 'string' };
+      }
+
+      properties[p.name] = fieldSchema;
       if (p.required) required.push(p.name);
     }
 

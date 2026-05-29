@@ -4,6 +4,7 @@ import { FormsModule } from '@angular/forms';
 import {
   AgenticDirective,
   DataTableComponent,
+  AgentAction,
   AgentActionResult,
   AgentWorldService,
 } from 'agentic-ui';
@@ -114,30 +115,29 @@ interface PendingMatchRequest {
 
       <!-- Add/Edit Modal -->
       @if (showModal()) {
-        <div class="modal-backdrop" (click)="closeModal()">
+        <div 
+          class="modal-backdrop" 
+          (click)="closeModal()"
+          agentic
+          agenticId="task-dialog-container"
+          role="Modal"
+          [actions]="dialogFormControllerActions"
+        >
           <div class="modal" (click)="$event.stopPropagation()">
             <h2>{{ editId() ? '✏️ Edit Task' : '➕ New Task' }}</h2>
 
             <label>Title</label>
-            <input
-              [ngModel]="formTitle()"
-              (ngModelChange)="formTitle.set($event)"
-              placeholder="Task title..."
-            />
+            <input [(ngModel)]="formTitle" placeholder="Task title..." />
 
             <label>Priority</label>
-            <select [ngModel]="formPriority()" (ngModelChange)="formPriority.set($event)">
+            <select [(ngModel)]="formPriority">
               <option value="low">Low</option>
               <option value="medium">Medium</option>
               <option value="high">High</option>
             </select>
 
             <label>Assignee</label>
-            <input
-              [ngModel]="formAssignee()"
-              (ngModelChange)="formAssignee.set($event)"
-              placeholder="Assignee name..."
-            />
+            <input [(ngModel)]="formAssignee" placeholder="Assignee name..." />
 
             <div class="modal-actions">
               <button class="btn btn-secondary" (click)="closeModal()">Cancel</button>
@@ -145,8 +145,8 @@ interface PendingMatchRequest {
                 class="btn btn-primary"
                 agentic
                 [agenticId]="editId() ? 'save-edit-btn' : 'save-add-btn'"
-                [role]="editId() ? 'Modal - Edit' : 'Modal - Add'"
-                [actions]="saveAction()"
+                [role]="editId() ? 'Modal - Action Button' : 'Modal - Action Button'"
+                [actions]="saveAction"
                 (click)="save()"
               >
                 {{ editId() ? 'Save Changes' : 'Create Task' }}
@@ -476,17 +476,52 @@ export class CrudDemo {
     ],
   }));
 
-  /** Save action — shared between Add and Edit modals */
-  readonly saveAction = computed(() => [
-    {
-      name: this.editId() ? 'saveEdit' : 'saveAdd',
-      description: this.editId() ? 'Save changes to the current task.' : 'Create the new task.',
-      execute: async () => {
-        this.save();
-        return { success: true, message: 'Task saved.' };
+  /** Save action — shared between Add and Edit modals.
+   * Uses a getter so name/description update when editId changes. */
+  get saveAction(): AgentAction[] {
+    return [
+      {
+        name: this.editId() ? 'saveChangesButton' : 'createTaskButton',
+        description: 'Click the submission button directly to validate and persist the layout data form.',
+        execute: async () => {
+          const saved = this.save();
+          return saved
+            ? { success: true, message: 'Form tracking successfully persisted via manual click simulation.' }
+            : { success: false, message: 'Validation error: Task title string can not be empty.' };
+        },
       },
+    ];
+  }
+
+  /** Form controller actions bound to the Modal container layer */
+  readonly dialogFormControllerActions: AgentAction[] = [
+    {
+      name: 'fillDialogForm',
+      description: 'Configure and write data properties inside the opened modal inputs fields setup layout.',
+      parameters: [
+        { name: 'title', type: 'string', description: 'Task title name description' },
+        { name: 'priority', type: 'string', description: 'Priority configuration tier', enum: ['low', 'medium', 'high'] },
+        { name: 'assignee', type: 'string', description: 'Identity assignment target' }
+      ],
+      execute: async (params: Record<string, unknown> = {}) => {
+        if (typeof params['title'] === 'string') this.formTitle.set(params['title']);
+        if (typeof params['assignee'] === 'string') this.formAssignee.set(params['assignee']);
+        const pTier = params['priority'];
+        if (pTier === 'low' || pTier === 'medium' || pTier === 'high') {
+          this.formPriority.set(pTier);
+        }
+        return { success: true, message: 'Dialog input models modified successfully.' };
+      }
     },
-  ]);
+    {
+      name: 'cancelAndCloseDialog',
+      description: 'Dismiss the dialog view directly without saving input variations.',
+      execute: async () => {
+        this.closeModal();
+        return { success: true, message: 'Modal context window dismissed cleanly.' };
+      }
+    }
+  ];
 
   // ---- Computed ----
 
@@ -522,8 +557,8 @@ export class CrudDemo {
     };
   }
 
-  save(): void {
-    if (!this.formTitle().trim()) return;
+  save(): boolean {
+    if (!this.formTitle().trim()) return false;
 
     if (this.editId()) {
       this.tasks.update((list) =>
@@ -549,6 +584,7 @@ export class CrudDemo {
       this.tasks.update((list) => [...list, newTask]);
     }
     this.closeModal();
+    return true;
   }
 
   onTableSelectionChange(ids: string[]): void {

@@ -118,8 +118,8 @@ describe('OpenAiProvider', () => {
       }
 
       expect(chunks).toHaveLength(2);
-      expect(chunks[0]).toEqual({ type: 'thought', text: 'Let' });
-      expect(chunks[1]).toEqual({ type: 'thought', text: ' me think' });
+      expect(chunks[0]).toEqual({ type: 'content', text: 'Let' });
+      expect(chunks[1]).toEqual({ type: 'content', text: ' me think' });
     });
 
     it('should yield tool call chunks', async () => {
@@ -290,7 +290,7 @@ describe('OpenAiProvider', () => {
 
       // Should skip the malformed chunk and continue
       expect(chunks).toHaveLength(1);
-      expect(chunks[0].type).toBe('thought');
+      expect(chunks[0].type).toBe('content');
     });
   });
 

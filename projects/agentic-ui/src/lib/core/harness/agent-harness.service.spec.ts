@@ -23,6 +23,7 @@ function createMockAppRef() {
     afterTick: new BehaviorSubject(void 0),
     onStable: new Subject<void>(),
     tick: vi.fn(),
+    _tick: vi.fn(),
     attachView: vi.fn(),
     detachView: vi.fn(),
     componentTypes: [],
@@ -70,6 +71,9 @@ describe('AgentHarness', () => {
 
     harness = TestBed.inject(AgentHarness);
     world = TestBed.inject(AgentWorldService);
+    // In test environment, afterEveryRender never fires, so waitForStable
+    // would block indefinitely. Mock it to resolve immediately.
+    vi.spyOn(world, 'waitForStable').mockResolvedValue();
   });
 
   afterEach(() => {

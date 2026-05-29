@@ -38,6 +38,7 @@ function createMockAppRef() {
     afterTick: new BehaviorSubject(void 0),
     onStable: new BehaviorSubject(void 0),
     tick: vi.fn(),
+    _tick: vi.fn(),
     attachView: vi.fn(),
     detachView: vi.fn(),
     componentTypes: [],
@@ -367,20 +368,21 @@ describe('AgentWorldService', () => {
       expect(service.isStable()).toBe(true);
     });
 
-    it('should react to ApplicationRef.isStable changes', () => {
-      const { service, appRef } = createService();
-      (appRef.isStable as BehaviorSubject<boolean>).next(false);
+    it('waitForStable should toggle isStable to false and await renderComplete$', async () => {
+      const { service } = createService();
+
+      expect(service.isStable()).toBe(true);
+
+      // waitForStable sets isStable(false), subscribes to renderComplete$, yields
+      const promise = service.waitForStable();
       expect(service.isStable()).toBe(false);
 
-      (appRef.isStable as BehaviorSubject<boolean>).next(true);
-      expect(service.isStable()).toBe(true);
-    });
-
-    it('waitForStable should return immediately when already stable', async () => {
-      const { service } = createService();
-      const before = Date.now();
-      await service.waitForStable();
-      expect(Date.now() - before).toBeLessThan(50);
+      // In the test environment, afterEveryRender never fires natively, so we
+      // manually signal completion via the renderComplete$ subject through the
+      // service internals to unblock the wait. Also yield to macro task queue.
+      const serviceAny = service as any;
+      serviceAny.renderComplete$.next();
+      await promise;
     });
   });
 

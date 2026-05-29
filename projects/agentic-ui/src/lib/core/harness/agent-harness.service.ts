@@ -81,11 +81,19 @@ export class AgentHarness {
 
   /** Export the full conversation state for persistence. */
   exportConversation(): ConversationHistory {
-    // Slit and cap indices to avoid blowing past 5MB system web storage limits
     const BOUNDARY_LIMIT = 15;
+    let slicedMessages = this.messages.slice(-BOUNDARY_LIMIT);
+
+    // Safeguard for strict alternating providers (like DeepSeek): If the truncation
+    // slice cuts mid-turn and leaves an orphaned 'tool' role response at the front
+    // of the history without its preceding 'tool_calls', shift the boundary past it.
+    while (slicedMessages.length > 0 && slicedMessages[0].role === 'tool') {
+      slicedMessages.shift();
+    }
+
     return {
       systemPrompt: this.systemPrompt,
-      messages: this.messages.slice(-BOUNDARY_LIMIT),
+      messages: slicedMessages,
       steps: this.steps().slice(-BOUNDARY_LIMIT),
     };
   }
@@ -134,117 +142,131 @@ export class AgentHarness {
         const snapshot = this.world.snapshot();
 
         // Per-call AbortController (merged with external signal if provided)
-      const abort = new AbortController();
-      if (config.signal) {
-        config.signal.addEventListener('abort', () => abort.abort());
-      }
-      const timer = setTimeout(() => abort.abort(), timeoutMs);
-
-      let toolCalls: ToolCall[] = [];
-
-      try {
-        const stream = this.llm.getStream(
-          this.messages,
-          snapshot.tools,
-          this.systemPrompt,
-          abort.signal,
-        );
-
-        for await (const chunk of stream) {
-          if (chunk.type === 'thought' && chunk.text) {
-            this.thought.update(t => t + chunk.text);
-          }
-          if (chunk.type === 'tool_call' && chunk.data) {
-            toolCalls.push(chunk.data);
-          }
+        const abort = new AbortController();
+        if (config.signal) {
+          config.signal.addEventListener('abort', () => abort.abort());
         }
-      } finally {
-        clearTimeout(timer);
-      }
+        const timer = setTimeout(() => abort.abort(), timeoutMs);
 
-      // If aborted externally (by signal, not timeout)
-      if (abort.signal.aborted && config.signal?.aborted) {
-        this.steps.update(s => [
-          ...s,
-          {
-            thought: this.thought(),
-            action: null,
-            result: 'Cycle aborted by user.',
-            timestamp: Date.now(),
-          },
-        ]);
-        return;
-      }
+        let toolCalls: ToolCall[] = [];
 
-      // If the LLM produced thought text, record it
-      const thoughtText = this.thought();
-      if (thoughtText) {
-        this.messages.push({ role: 'assistant', content: thoughtText });
-      }
-
-      // Dispatch tool calls (capped by maxSteps)
-      const dispatchable = toolCalls.slice(0, maxSteps);
-      for (const toolCall of dispatchable) {
-        // Optimized check timeout threshold from 5s down to 500ms to ignore websocket / polling blocks
-        await this.waitForStableWithTimeout(500);
-
-        const { entryId, actionName } = this.parseToolName(toolCall.function.name);
-        let args: Record<string, unknown> = {};
         try {
-          args = JSON.parse(toolCall.function.arguments);
-        } catch { /* arguments may be malformed */ }
+          const stream = this.llm.getStream(
+            this.messages,
+            snapshot.tools,
+            this.systemPrompt,
+            abort.signal,
+          );
 
-        const result = await this.world.executeAction(entryId, actionName, args);
-
-        // Record the step
-        this.steps.update(s => [
-          ...s,
-          {
-            thought: thoughtText,
-            action: `${actionName}(${JSON.stringify(args)})`,
-            result: result.message,
-            timestamp: Date.now(),
-          },
-        ]);
-
-        // Trim payload payload length down to a maximum threshold limit before sending across to prompt buffer
-        let serializedResult = JSON.stringify(result);
-        if (serializedResult.length > 2500) {
-          serializedResult = serializedResult.substring(0, 2500) + '... [OUTPUT TRUNCATED FOR TOKEN CONTEXT SAFETY]';
+          for await (const chunk of stream) {
+            // Accumulate both internal thought tokens and general text content tokens
+            // to ensure conversational steps are preserved correctly across turns
+            if ((chunk.type === 'thought' || chunk.type === 'content') && chunk.text) {
+              this.thought.update((t) => t + chunk.text);
+            }
+            if (chunk.type === 'tool_call' && chunk.data) {
+              toolCalls.push(chunk.data);
+            }
+          }
+        } finally {
+          clearTimeout(timer);
         }
 
-        // Add tool result to conversation
-        this.messages.push({
-          role: 'tool',
-          content: serializedResult,
-          tool_call_id: toolCall.id,
-        });
+        // If aborted externally (by signal, not timeout)
+        if (abort.signal.aborted && config.signal?.aborted) {
+          this.steps.update((s) => [
+            ...s,
+            {
+              thought: this.thought(),
+              action: null,
+              result: 'Cycle aborted by user.',
+              timestamp: Date.now(),
+            },
+          ]);
+          return;
+        }
 
-        // Short tracking validation buffer to maintain speed velocity
-        await this.waitForStableWithTimeout(500);
-      }
+        // If the LLM produced thought text, record it
+        const thoughtText = this.thought();
+        if (thoughtText) {
+          this.messages.push({ role: 'assistant', content: thoughtText });
+        }
 
-      // If no tool calls, the agent is done, break the while loop
-      if (dispatchable.length === 0) {
-        this.steps.update(s => [
-          ...s,
-          {
-            thought: thoughtText,
-            action: null,
-            result: 'No action taken.',
-            timestamp: Date.now(),
-          },
-        ]);
-        break; 
-      } else {
-        // Tools were executed, continue loop to let LLM observe observation results
-        hasNextStep = true;
-        this.thought.set(''); // Reset temporary string buffer for the next iteration turn
-      }
+        // Dispatch tool calls (capped by maxSteps)
+        const dispatchable = toolCalls.slice(0, maxSteps);
+        for (const toolCall of dispatchable) {
+          // Optimized check timeout threshold from 5s down to 500ms to ignore websocket / polling blocks
+          await this.waitForStableWithTimeout(500);
 
+          const { entryId, actionName } = this.parseToolName(toolCall.function.name);
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(toolCall.function.arguments);
+          } catch {
+            /* arguments may be malformed */
+          }
+
+          let result = await this.world.executeAction(entryId, actionName, args);
+
+          // Self-correcting reflective parsing logic: if the component action failed,
+          // format the content payload to demand correction from the model on the next turn
+          if (!result.success) {
+            result = {
+              ...result,
+              message: `[EXECUTION CRITICAL FAILURE] Action failed validation rules. Reason: "${result.message}". Correction Guidance: Inspect your parameters layout, verify object identifiers match existing dataset snapshots exactly, and invoke the corrected call structure during the next action turn.`,
+            };
+          }
+
+          // Record the step
+          this.steps.update((s) => [
+            ...s,
+            {
+              thought: thoughtText,
+              action: `${actionName}(${JSON.stringify(args)})`,
+              result: result.message,
+              timestamp: Date.now(),
+            },
+          ]);
+
+          // Trim payload payload length down to a maximum threshold limit before sending across to prompt buffer
+          let serializedResult = JSON.stringify(result);
+          if (serializedResult.length > 2500) {
+            serializedResult =
+              serializedResult.substring(0, 2500) +
+              '... [OUTPUT TRUNCATED FOR TOKEN CONTEXT SAFETY]';
+          }
+
+          // Add tool result to conversation
+          this.messages.push({
+            role: 'tool',
+            content: serializedResult,
+            tool_call_id: toolCall.id,
+          });
+
+          // Short tracking validation buffer to maintain speed velocity
+          await this.waitForStableWithTimeout(500);
+        }
+
+        // If no tool calls, the agent is done, break the while loop
+        if (dispatchable.length === 0) {
+          this.steps.update((s) => [
+            ...s,
+            {
+              thought: thoughtText,
+              action: null,
+              result: 'No action taken.',
+              timestamp: Date.now(),
+            },
+          ]);
+          break;
+        } else {
+          // Tools were executed, continue loop to let LLM observe observation results
+          hasNextStep = true;
+          this.thought.set(''); // Reset temporary string buffer for the next iteration turn
+        }
       } // <-- END OF REACT WHILE LOOP
     } catch (error) {
-      this.steps.update(s => [
+      this.steps.update((s) => [
         ...s,
         {
           thought: '',

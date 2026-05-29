@@ -92,6 +92,7 @@ export class AgentHarness {
     this.messages = [];
     this.thought.set('');
     this.steps.set([]);
+    this.chatTurns.set([]);
     this.world.blur();
   }
 

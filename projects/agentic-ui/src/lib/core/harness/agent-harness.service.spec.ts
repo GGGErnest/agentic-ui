@@ -355,6 +355,16 @@ describe('AgentHarness', () => {
       expect(harness.steps()).toEqual([]);
       expect(world.focusedEntryId()).toBeNull();
     });
+
+    it('should clear chatTurns', () => {
+      harness['chatTurns'].set([
+        { userMessage: 'hello', steps: [], timestamp: 1 },
+      ]);
+
+      harness.reset();
+
+      expect(harness.chatTurns()).toEqual([]);
+    });
   });
 
   // ========== Error Handling ==========

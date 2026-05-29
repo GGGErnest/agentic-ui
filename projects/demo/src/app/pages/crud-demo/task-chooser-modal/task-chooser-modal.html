@@ -1,0 +1,39 @@
+<div
+  class="modal-backdrop"
+  agentic
+  agenticId="task-chooser-modal"
+  role="Delete Chooser Modal"
+  [actions]="chooserActions"
+  (click)="cancelled.emit()"
+>
+  <div class="modal match-chooser" (click)="$event.stopPropagation()">
+    <h2>Choose rows to delete</h2>
+    <div class="demo-subtitle">{{ matches().length }} rows matched. Select the ones you want to delete.</div>
+    <div class="match-chooser__list">
+      @for (task of matches(); track task.id) {
+        <label class="match-chooser__row">
+          <input
+            type="checkbox"
+            [checked]="chosenIds().has(task.id)"
+            (change)="choiceToggled.emit(task.id)"
+          />
+          <span>{{ task.title }}</span>
+          <span>{{ task.priority }}</span>
+          <span>{{ task.status }}</span>
+          <span>{{ task.assignee }}</span>
+        </label>
+      }
+    </div>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" (click)="cancelled.emit()">Cancel</button>
+      <button
+        type="button"
+        class="btn btn-danger"
+        [disabled]="chosenIds().size === 0"
+        (click)="confirmed.emit()"
+      >
+        Delete Chosen Rows
+      </button>
+    </div>
+  </div>
+</div>

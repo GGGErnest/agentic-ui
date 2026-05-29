@@ -1,8 +1,4 @@
-<div
-  class="modal-backdrop"
-  agentic
-  (click)="cancelled.emit()"
->
+<div class="modal-backdrop" agentic (click)="cancelled.emit()" role="modal">
   <div class="modal" (click)="$event.stopPropagation()">
     <h2>{{ editId() ? '✏️ Edit Task' : '➕ New Task' }}</h2>
     <label>Title</label>

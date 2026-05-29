@@ -12,9 +12,6 @@
     "backend:build": "tsc -p projects/backend/tsconfig.json",
     "backend:start": "node dist/backend/server.js",
     "backend:test": "vitest run --config projects/backend/vitest.config.ts",
-    "litellm:up": "docker-compose -f docker-compose.litellm.yml up -d",
-    "litellm:down": "docker-compose -f docker-compose.litellm.yml down",
-    "litellm:logs": "docker-compose -f docker-compose.litellm.yml logs -f litellm",
     "verify:litellm-demo": "npm run backend:test && ng build agentic-ui && ng test demo --watch=false && ng build demo --configuration development"
   },
   "private": true,

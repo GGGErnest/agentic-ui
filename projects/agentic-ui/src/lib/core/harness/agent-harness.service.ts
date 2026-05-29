@@ -34,8 +34,8 @@ export interface ConversationHistory {
   steps: AgentStep[];
 }
 
-const DEFAULT_TIMEOUT_MS = 60_000;
-const DEFAULT_MAX_STEPS = 10;
+const DEFAULT_TIMEOUT_MS = 60_0000;
+const DEFAULT_MAX_STEPS = 20;
 
 /**
  * AgentHarness — the "Brain" of the Agentic-UI framework.
@@ -216,16 +216,21 @@ export class AgentHarness {
               toolCalls.push(chunk.data);
             }
           }
+        } catch (error) {
+          if ((error as Error)?.name !== 'AbortError') {
+            throw error;
+          }
         } finally {
           clearTimeout(timer);
         }
 
-        // If aborted externally (by signal, not timeout)
-        if (abort.signal.aborted && config.signal?.aborted) {
+        if (abort.signal.aborted) {
           this.appendStepToCurrentTurn({
             thought: this.thought(),
             action: null,
-            result: 'Cycle aborted by user.',
+            result: config.signal?.aborted
+              ? 'Cycle aborted by user.'
+              : `Cycle timed out after ${timeoutMs}ms waiting for LLM response.`,
             timestamp: Date.now(),
           });
           return;

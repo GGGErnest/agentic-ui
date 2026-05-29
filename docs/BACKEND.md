@@ -4,17 +4,17 @@ This guide walks through the complete local setup for running the demo with a re
 
 ## Prerequisites
 
-- **Node.js/npm** with workspace access (root package.json manages all dependencies)
+- **Node.js** with workspace access
 - **Docker & Docker Compose** for running LiteLLM locally
-- **Ollama** installed locally or Docker-compatible for LLM model downloads (for the first run)
+- **OpenCode Go API key** with access to `deepseek-v4-pro`
 
 ## Setup: Step by Step
 
-Run these commands in order from the repo root:
+Run these commands from the repo root.
 
 ### 1. Install dependencies
 ```bash
-npm install
+yarn install
 ```
 
 ### 2. Create backend environment file
@@ -22,31 +22,31 @@ npm install
 cp projects/backend/.env.example projects/backend/.env
 ```
 
-### 3. Pull the Ollama model (one-time)
-```bash
-ollama pull llama3.2:3b
+### 3. Put your OpenCode Go key in `projects/backend/.env`
+Set:
+
+```env
+LITELLM_UPSTREAM_API_KEY=your-real-opencode-go-key
 ```
 
-### 4. Start LiteLLM (terminal 1)
-```bash
-npm run litellm:up
+Default upstream values already target OpenCode Go and `deepseek-v4-pro`:
+
+```env
+LITELLM_UPSTREAM_API_BASE=https://opencode.ai/zen/go/v1
+LITELLM_UPSTREAM_LITELLM_MODEL=openai/deepseek-v4-pro
 ```
 
-LiteLLM starts in the background on `localhost:8000`.
-
-### 5. Start the backend dev server (terminal 2)
+### 4. Start the full stack
 ```bash
-npm run backend:dev
+yarn demo:full
 ```
 
-Backend listens on `localhost:3000`.
+This command will:
 
-### 6. Start the demo app (terminal 3)
-```bash
-npm start
-```
-
-Demo runs on `localhost:4200`.
+- create `projects/backend/.env` from `.env.example` if it does not exist yet
+- start LiteLLM on `localhost:8000`
+- start the backend on `localhost:3000`
+- start the Angular demo on `localhost:4200`
 
 ## Verification
 
@@ -89,7 +89,7 @@ Expected: `200 OK` with a valid OpenAI-compatible chat response.
 
 ### Full workspace verification
 ```bash
-npm run backend:test
+yarn backend:test
 ng build agentic-ui
 ng test demo --watch=false
 ng build demo --configuration development
@@ -100,7 +100,7 @@ All four commands should pass.
 ## Fallback Path and Local Development
 
 **Default behavior:**
-- **Development mode** (`ng serve` or `npm start`): demo connects to backend at `http://localhost:3000/api`
+- **Development mode** (`ng serve`, `yarn start`, or `yarn demo:full`): demo connects to backend at `http://localhost:3000/api`
 - **Production mode** (`ng build`): demo uses the inline mock provider
 
 **If the backend is not running:**
@@ -113,38 +113,17 @@ llm: {
 }
 ```
 
-Then rebuild and restart the demo. This is a one-line local escape hatch if LiteLLM/Ollama are unavailable.
-
-## Important: Library Build Consumption
-
-The demo application imports the `agentic-ui` library from its **built output** at `dist/agentic-ui`, not from source files.
-
-If you modify any files under `projects/agentic-ui/src/`, you must rebuild the library before the demo will see the changes:
-
-```bash
-ng build agentic-ui
-```
-
-Then restart or refresh the demo. The `agentic-ui` import path in the demo's `tsconfig.app.json` points to `dist/agentic-ui`, so an outdated build will mask library changes.
+Then rebuild and restart the demo. This is a one-line local escape hatch if LiteLLM is unavailable.
 
 ## Stopping Services
 
-### Stop backend
-Press `Ctrl+C` in the terminal running `npm run backend:dev`.
-
-### Stop LiteLLM
-```bash
-npm run litellm:down
-```
-
-### Stop demo
-Press `Ctrl+C` in the terminal running `npm start`.
+Press `Ctrl+C` in the terminal running `yarn demo:full`. The command shuts down backend, demo, and LiteLLM.
 
 ## Troubleshooting
 
 **LiteLLM container fails to start:**
-- Ensure Ollama is running on `localhost:11434` (or adjust `OLLAMA_API_BASE` in `projects/backend/.env`)
-- Check logs: `npm run litellm:logs`
+- Check logs: `yarn litellm:logs`
+- Verify `LITELLM_UPSTREAM_API_BASE` and `LITELLM_UPSTREAM_API_KEY` in `projects/backend/.env`
 
 **Backend returns 401 Unauthorized:**
 - Verify the `Authorization` header includes the exact token: `Bearer agentic-ui-demo`
@@ -158,15 +137,18 @@ Press `Ctrl+C` in the terminal running `npm start`.
 **Backend cannot reach LiteLLM:**
 - Ensure LiteLLM container is running: `docker compose -f docker-compose.litellm.yml ps`
 - Verify `LITELLM_BASE_URL` in `projects/backend/.env` matches the service endpoint
+- Verify `LITELLM_UPSTREAM_API_BASE=https://opencode.ai/zen/go/v1`
+- Verify `LITELLM_UPSTREAM_LITELLM_MODEL=openai/deepseek-v4-pro`
 
 ## Architecture Overview
 
 The demo workflow consists of three independent services:
 
-1. **LiteLLM** (`localhost:8000`) — OpenAI-compatible proxy to Ollama
+1. **LiteLLM** (`localhost:8000`) — OpenAI-compatible proxy to OpenCode Go
    - Loads model aliases from `litellm.config.yaml`
    - Authenticates with `LITELLM_API_KEY`
-   - Proxies requests to a local Ollama instance
+   - Proxies requests to `https://opencode.ai/zen/go/v1`
+   - Routes `agentic-demo` to `openai/deepseek-v4-pro` by default
 
 2. **Backend** (`localhost:3000`) — Express proxy and validator
    - Validates client tokens (`DEMO_CLIENT_TOKEN`)
@@ -185,4 +167,4 @@ The demo workflow consists of three independent services:
 Once verified, you can:
 - Open the demo in your browser and test the Agent Shell
 - Modify backend or LiteLLM config without restarting the demo (hot-reload in Node)
-- Use the backend as a template for other LLM provider workflows (Claude, Cohere, etc.)
+- Use the backend as a template for other OpenAI-compatible or LiteLLM-backed providers

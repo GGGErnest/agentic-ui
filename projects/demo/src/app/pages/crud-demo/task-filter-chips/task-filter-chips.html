@@ -1,0 +1,16 @@
+<div class="demo-filters">
+  @for (chip of chips; track chip.priority) {
+    <button
+      type="button"
+      class="chip"
+      [class.chip--active]="activeFilter() === chip.priority"
+      agentic
+      [agenticId]="'filter-' + chip.priority"
+      role="Filter Chip"
+      [actions]="chip.actions"
+      (click)="filterToggled.emit(chip.priority)"
+    >
+      {{ chip.label }}
+    </button>
+  }
+</div>

@@ -1,9 +1,6 @@
 <div
   class="modal-backdrop"
   agentic
-  agenticId="task-form-modal"
-  role="Task Form Modal"
-  [actions]="modalActions"
   (click)="cancelled.emit()"
 >
   <div class="modal" (click)="$event.stopPropagation()">

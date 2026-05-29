@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input, linkedSignal, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { AgenticDirective, AgentAction } from 'agentic-ui';
+import { AgenticDirective, AgentAction, AgenticComponent, AGENTIC_COMPONENT } from 'agentic-ui';
 
 export interface TaskFormValue {
   title: string;
@@ -13,6 +13,7 @@ export interface TaskFormValue {
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [AgenticDirective, FormsModule],
+  providers: [{ provide: AGENTIC_COMPONENT, useExisting: TaskFormModalComponent }],
   templateUrl: './task-form-modal.html',
   styles: [
     `
@@ -80,7 +81,14 @@ export interface TaskFormValue {
     `,
   ],
 })
-export class TaskFormModalComponent {
+export class TaskFormModalComponent implements AgenticComponent {
+  readonly agenticId = 'task-form-modal';
+  readonly agenticRole = 'Modal';
+
+  get agenticActions(): AgentAction[] {
+    return this.modalActions;
+  }
+
   readonly editId = input<string | null>(null);
   readonly initialTitle = input('');
   readonly initialPriority = input<'low' | 'medium' | 'high'>('medium');

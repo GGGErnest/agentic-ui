@@ -1,0 +1,65 @@
+<div
+  class="demo-container"
+  agentic
+  agenticId="task-ops"
+  role="Task Operations"
+  [actions]="taskResolverActions"
+>
+  <header class="demo-header">
+    <h1>🧪 Agentic-UI Demo</h1>
+    <p class="demo-subtitle">
+      This page is instrumented for AI agents. Every button and the data table expose their
+      capabilities through the World Registry — no DOM scraping needed.
+    </p>
+  </header>
+
+  <app-task-toolbar
+    [taskCount]="tasks().length"
+    [selectedCount]="selectedCount()"
+    (addClicked)="openAddModal()"
+    (deleteSelectedClicked)="deleteSelected()"
+    (clearFiltersClicked)="clearFilters()"
+  />
+
+  <app-task-filter-chips
+    [activeFilter]="activeFilter()"
+    (filterToggled)="togglePriorityFilter($event)"
+  />
+
+  <agui-data-table
+    agenticId="task-table"
+    title="Tasks"
+    [columns]="['title', 'priority', 'status', 'assignee']"
+    [data]="tasks()"
+    idField="id"
+    (selectionChange)="onTableSelectionChange($event)"
+    (rowsDeleted)="onRowsDeleted($event)"
+  />
+
+  @if (showModal()) {
+    <app-task-form-modal
+      [editId]="editId()"
+      [initialTitle]="formTitle()"
+      [initialPriority]="formPriority()"
+      [initialAssignee]="formAssignee()"
+      (saved)="onFormSaved($event)"
+      (cancelled)="closeModal()"
+    />
+  }
+
+  @if (pendingMatchRequest(); as request) {
+    <app-task-chooser-modal
+      [matches]="request.matches"
+      [chosenIds]="pendingChoiceIds()"
+      (choiceToggled)="togglePendingChoice($event)"
+      (confirmed)="confirmPendingMatch()"
+      (cancelled)="cancelPendingMatch()"
+    />
+  }
+
+  <footer class="demo-footer">
+    <span class="demo-hint">
+      💡 Open the Agent Shell (bottom-right) to interact with this page via AI.
+    </span>
+  </footer>
+</div>

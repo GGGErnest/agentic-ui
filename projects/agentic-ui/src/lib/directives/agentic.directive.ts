@@ -3,6 +3,25 @@ import { AgentWorldService } from '../core/world/agent-world.service';
 import { AgentAction } from '../core/world/agent-action.model';
 import { AGENTIC_COMPONENT } from '../core/world/agentic-component.token';
 
+/**
+ * AgenticDirective — bridges UI components to the World Registry.
+ *
+ * Two registration modes:
+ *
+ * 1. Token mode (Angular components): The host component provides AGENTIC_COMPONENT
+ *    and implements AgenticComponent. No template inputs are required.
+ *    ```html
+ *    <div agentic></div>
+ *    ```
+ *
+ * 2. Input mode (native elements, third-party components): Pass agenticId, role,
+ *    actions, and metadata as template inputs.
+ *    ```html
+ *    <button agentic agenticId="submit-btn" [actions]="btnActions">Submit</button>
+ *    ```
+ *
+ * ID resolution: agenticId input → token agenticId → element id → UUID
+ */
 @Directive({
   selector: '[agentic]',
   standalone: true,
@@ -11,6 +30,8 @@ export class AgenticDirective implements OnDestroy {
   private readonly world = inject(AgentWorldService);
   private readonly el = inject(ElementRef<HTMLElement>);
   private readonly host = inject(AGENTIC_COMPONENT, { optional: true });
+
+  private readonly fallbackId = crypto.randomUUID();
 
   readonly agenticId = input<string | undefined>(undefined);
 
@@ -31,7 +52,7 @@ export class AgenticDirective implements OnDestroy {
         inputId ??
         host?.agenticId ??
         (this.el.nativeElement.id || undefined) ??
-        crypto.randomUUID();
+        this.fallbackId;
 
       const role = host ? (host.agenticRole ?? 'UI Component') : this.role();
       const actions = host ? host.agenticActions : this.actions();

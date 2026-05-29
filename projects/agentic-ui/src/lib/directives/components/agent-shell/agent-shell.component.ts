@@ -3,7 +3,18 @@ import {
   inject,
   signal,
   computed,
+  effect,
+  ViewChild,
+  ElementRef,
+  OnInit,
+  OnDestroy,
 } from '@angular/core';
+
+declare global {
+  interface Window {
+    Agent?: Record<string, () => unknown>;
+  }
+}
 import { CommonModule } from '@angular/common';
 import { AgentHarness, AgentStep } from '../../../core/harness/agent-harness.service';
 import { AgentWorldService } from '../../../core/world/agent-world.service';
@@ -25,12 +36,10 @@ import { AgentApprovalDialogComponent } from '../../../components/approval-dialo
   standalone: true,
   imports: [CommonModule, AgentApprovalDialogComponent],
   template: `
-    <!-- Approval dialog renders automatically when pending -->
     <agui-approval-dialog />
 
     <div class="agent-shell" [class.expanded]="isExpanded()">
       @if (!isExpanded()) {
-        <!-- Collapsed: circular button -->
         <button class="agent-shell__toggle" (click)="toggleExpand()" [attr.title]="label">
           🤖
           @if (harness.isRunning()) {
@@ -38,58 +47,72 @@ import { AgentApprovalDialogComponent } from '../../../components/approval-dialo
           }
         </button>
       } @else {
-        <!-- Expanded: full chat interface -->
         <div class="agent-shell__panel">
-          <!-- Header -->
           <div class="agent-shell__header">
-            <span class="agent-shell__title">Agent</span>
+            <span class="agent-shell__title">🤖 Agent Timeline Console</span>
             <div class="agent-shell__controls">
               <span class="agent-shell__badge" [class.shadow]="shadowActive()">
                 {{ shadowActive() ? '🛡️ Shadow' : '⚡ Live' }}
               </span>
-              <span class="agent-shell__badge">{{ visibleCount() }} visible</span>
-              <button class="agent-shell__btn-icon" (click)="toggleShadowMode()" title="Toggle shadow mode">
-                🛡️
-              </button>
-              <button class="agent-shell__btn-icon" (click)="reset()" title="Reset conversation">↺</button>
+              <button class="agent-shell__btn-icon" (click)="toggleShadowMode()" title="Toggle shadow mode">🛡️</button>
+              <button class="agent-shell__btn-icon" (click)="reset()" title="Reset conversation history">↺</button>
               <button class="agent-shell__btn-icon" (click)="toggleExpand()" title="Minimize">✕</button>
             </div>
           </div>
 
-          <!-- Thought stream -->
-          @if (harness.thought()) {
-            <div class="agent-shell__thought">
-              <div class="agent-shell__thought-label">💭 Thinking</div>
-              <div class="agent-shell__thought-text">{{ harness.thought() }}</div>
-            </div>
-          }
+          <div class="agent-shell__steps" #stepsContainer>
+            <div class="agent-shell__steps-label">Activity Stack</div>
+            
+            @if (!harness.isRunning() && harness.steps().length === 0 && !harness.thought()) {
+              <div class="agent-shell__empty-state">
+                <p>System idle. Issue a statement or use a suggestion chip below to start.</p>
+              </div>
+            }
 
-          <!-- Step history -->
-          @if (harness.steps().length > 0) {
-            <div class="agent-shell__steps">
-              <div class="agent-shell__steps-label">Steps ({{ harness.steps().length }})</div>
-              @for (step of harness.steps(); track step.timestamp) {
-                <div class="agent-shell__step" [class.failed]="step.result && step.result.toLowerCase().includes('error')">
-                  <div class="agent-shell__step-header">
-                    <span class="agent-shell__step-action">
-                      {{ step.action ?? '💬 thought' }}
-                    </span>
-                    <span class="agent-shell__step-status" [class.success]="step.result && !step.result.toLowerCase().includes('error')">
-                      {{ step.result ? (step.result.includes('Error') || step.result.includes('rejected') ? '✗' : '✓') : '' }}
-                    </span>
-                  </div>
-                  @if (step.thought) {
-                    <div class="agent-shell__step-thought">{{ step.thought }}</div>
-                  }
-                  @if (step.result) {
-                    <div class="agent-shell__step-result">{{ step.result }}</div>
-                  }
+            @if (harness.isRunning() && harness.steps().length === 0 && !harness.thought()) {
+              <div class="agent-shell__loading-state">
+                <div class="spinner-ring"></div>
+                <p>Contacting proxy gateway & compiling structural context...</p>
+              </div>
+            }
+
+            @for (step of harness.steps(); track step.timestamp) {
+              <div class="agent-shell__step" [class.failed]="step.result && step.result.toLowerCase().includes('error')">
+                <div class="agent-shell__step-header">
+                  <span class="agent-shell__step-action">
+                    {{ step.action ? '⚙️ ' + step.action : '🧠 General Reasoning Task' }}
+                  </span>
+                  <span class="agent-shell__step-status" [class.success]="step.result && !step.result.toLowerCase().includes('error')">
+                    {{ step.result ? (step.result.includes('Error') || step.result.includes('rejected') ? '✗ Failed' : '✓ Completed') : '' }}
+                  </span>
                 </div>
+                @if (step.result) {
+                  <div class="agent-shell__step-result">{{ step.result }}</div>
+                }
+              </div>
+            }
+
+            @if (harness.thought(); as liveThought) {
+              <div class="agent-shell__thought-stream">
+                <div class="agent-shell__thought-stream-header">
+                  <span class="pulse-spark"></span>
+                  <span class="label">Agent Stream Processing...</span>
+                </div>
+                <div class="agent-shell__thought-stream-body">{{ liveThought }}</div>
+              </div>
+            }
+          </div>
+
+          @if (!harness.isRunning()) {
+            <div class="agent-shell__suggestions-container">
+              @for (chip of suggestions(); track chip) {
+                <button class="agent-shell__suggestion-chip" (click)="applySuggestion(chip)">
+                  💡 {{ chip }}
+                </button>
               }
             </div>
           }
 
-          <!-- Input area -->
           <div class="agent-shell__input">
             <input
               #inputEl
@@ -97,16 +120,23 @@ import { AgentApprovalDialogComponent } from '../../../components/approval-dialo
               [value]="userInput()"
               (input)="userInput.set(inputEl.value)"
               (keydown.enter)="sendPrompt()"
-              placeholder="Ask the agent..."
+              placeholder="Command the runtime agent..."
               [disabled]="harness.isRunning()"
             />
-            <button
-              class="agent-shell__btn-send"
-              (click)="sendPrompt()"
-              [disabled]="!userInput().trim() || harness.isRunning()"
-            >
-              {{ harness.isRunning() ? '...' : 'Send' }}
-            </button>
+            
+            @if (harness.isRunning()) {
+              <button class="agent-shell__btn-interrupt" (click)="interruptAgent()">
+                🛑 Stop
+              </button>
+            } @else {
+              <button 
+                class="agent-shell__btn-send" 
+                (click)="sendPrompt()"
+                [disabled]="!userInput().trim()"
+              >
+                Send
+              </button>
+            }
           </div>
         </div>
       }
@@ -198,18 +228,211 @@ import { AgentApprovalDialogComponent } from '../../../components/approval-dialo
     }
     .agent-shell__btn-send:hover { background: #2ea043; }
     .agent-shell__btn-send:disabled { opacity: 0.5; cursor: default; }
-  `],
+      .agent-shell__btn-interrupt {
+        padding: 8px 16px;
+        background: #da3633;
+        color: #fff;
+        font-weight: 600;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+        transition: background 0.15s;
+      }
+      .agent-shell__btn-interrupt:hover {
+        background: #f85149;
+      }
+      .agent-shell__empty-state {
+        padding: 40px 20px;
+        text-align: center;
+        color: #8b949e;
+        font-size: 13px;
+      }
+      .agent-shell__suggestions-container {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        padding: 8px 12px;
+        background: #161b22;
+        border-top: 1px solid #21262d;
+      }
+      .agent-shell__suggestion-chip {
+        text-align: left;
+        background: #0d1117;
+        border: 1px solid #30363d;
+        color: #58a6ff;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-size: 12px;
+        cursor: pointer;
+        transition: all 0.15s;
+      }
+      .agent-shell__suggestion-chip:hover {
+        background: #21262d;
+        border-color: #58a6ff;
+        color: #c9d1d9;
+      }
+      .agent-shell__thought-stream {
+        background: rgba(88, 166, 255, 0.05);
+        border: 1px dashed #58a6ff;
+        border-radius: 8px;
+        padding: 10px 12px;
+        margin-top: 4px;
+      }
+      .agent-shell__thought-stream-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 4px;
+      }
+      .agent-shell__thought-stream-body {
+        font-size: 12px;
+        font-family: 'SF Mono', monospace;
+        color: #8b949e;
+        white-space: pre-wrap;
+      }
+      .pulse-spark {
+        width: 6px;
+        height: 6px;
+        background: #58a6ff;
+        border-radius: 50%;
+        animation: spark-blink 1s infinite;
+      }
+      .agent-shell__loading-state {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 50px 20px;
+        color: #58a6ff;
+        font-size: 13px;
+        gap: 16px;
+        text-align: center;
+      }
+      .spinner-ring {
+        width: 24px;
+        height: 24px;
+        border: 2.5px solid rgba(88, 166, 255, 0.1);
+        border-radius: 50%;
+        border-top-color: #58a6ff;
+        animation: spin-loader 0.8s linear infinite;
+      }
+      @keyframes spin-loader {
+        to { transform: rotate(360deg); }
+      }
+      @keyframes spark-blink {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.4; transform: scale(1.2); }
+      }
+    `,
+  ],
 })
-export class AgentShellComponent {
+export class AgentShellComponent implements OnInit, OnDestroy {
   readonly harness = inject(AgentHarness);
   readonly world = inject(AgentWorldService);
 
+  @ViewChild('stepsContainer') private stepsContainer!: ElementRef<HTMLElement>;
+
   userInput = signal<string>('');
   isExpanded = signal<boolean>(false);
+  private abortController: AbortController | null = null;
 
   readonly shadowActive = this.world.shadowMode;
   readonly focusedId = this.world.focusedEntryId;
   readonly visibleCount = computed(() => this.world.activeEntries().size);
+
+  /** Context-aware prompt suggestions computed reactively based on visible components */
+  readonly suggestions = computed(() => {
+    const activeComponents = this.world.activeEntries();
+    const prompts: string[] = [];
+
+    for (const [id, entry] of activeComponents) {
+      if (entry.role === 'DataTable') {
+        prompts.push(`Summarize the ${id} table`);
+        prompts.push(`Clear filters on ${id}`);
+      } else if (entry.role === 'Toolbar Action') {
+        prompts.push(`Add a high priority task for Alice`);
+      }
+    }
+    if (prompts.length === 0) {
+      prompts.push('Show me what actions are available');
+    }
+    return prompts.slice(0, 3);
+  });
+
+  constructor() {
+    // Reactive Auto-Scrolling Effect tracking step history logs and thought streams
+    effect(() => {
+      this.harness.steps();
+      this.harness.thought();
+      this.scrollToBottom();
+    });
+  }
+
+  ngOnInit(): void {
+    window.Agent = {
+      snapshot: () => {
+        const snap = this.world.snapshot();
+        console.group('[Agent] snapshot()');
+        console.log('context:\n' + snap.context);
+        console.table(snap.tools.map((t) => ({ name: t.function.name, description: t.function.description })));
+        console.groupEnd();
+        return snap;
+      },
+      world: () => {
+        const entries = this.world.entries();
+        console.group('[Agent] world() — all registered entries');
+        console.log(entries);
+        console.groupEnd();
+        return entries;
+      },
+      visible: () => {
+        const active = this.world.activeEntries();
+        console.group('[Agent] visible() — viewport-visible entries');
+        console.log(active);
+        console.groupEnd();
+        return active;
+      },
+      messages: () => {
+        const msgs = this.harness.exportConversation().messages;
+        console.group('[Agent] messages() — LLM conversation history');
+        console.log(msgs);
+        console.groupEnd();
+        return msgs;
+      },
+      system: () => {
+        const prompt = this.harness.exportConversation().systemPrompt;
+        console.group('[Agent] system() — system prompt');
+        console.log(prompt);
+        console.groupEnd();
+        return prompt;
+      },
+      steps: () => {
+        const s = this.harness.steps();
+        console.group('[Agent] steps() — ReAct step history');
+        console.log(s);
+        console.groupEnd();
+        return s;
+      },
+      status: () => {
+        const st = {
+          isRunning: this.harness.isRunning(),
+          isStable: this.world.isStable(),
+          shadowMode: this.world.shadowMode(),
+          focusedEntryId: this.world.focusedEntryId(),
+          visibleCount: this.world.activeEntries().size,
+        };
+        console.group('[Agent] status()');
+        console.table(st);
+        console.groupEnd();
+        return st;
+      },
+    };
+  }
+
+  ngOnDestroy(): void {
+    delete window.Agent;
+  }
 
   get label(): string {
     if (this.harness.isRunning()) return 'Agent is thinking...';
@@ -223,7 +446,30 @@ export class AgentShellComponent {
 
     this.userInput.set('');
     this.isExpanded.set(true);
-    await this.harness.runCycle(prompt);
+    
+    this.abortController = new AbortController();
+    await this.harness.runCycle(prompt, { signal: this.abortController.signal });
+  }
+
+  /** Force stop agent execution loops instantly */
+  interruptAgent(): void {
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
+    }
+  }
+
+  applySuggestion(prompt: string): void {
+    this.userInput.set(prompt);
+  }
+
+  private scrollToBottom(): void {
+    setTimeout(() => {
+      if (this.stepsContainer) {
+        const el = this.stepsContainer.nativeElement;
+        el.scrollTop = el.scrollHeight;
+      }
+    }, 50);
   }
 
   toggleShadowMode(): void {

@@ -10,20 +10,43 @@
 export { AgentWorldService } from './lib/core/world/agent-world.service';
 
 // Core — World Registry (types)
-export type { AgentAction, AgentActionDef, AgentActionResult, ActionParameter } from './lib/core/world/agent-action.model';
-export type { WorldEntry, WorldSnapshot, ToolDefinition, SnapshotConfig } from './lib/core/world/world-entry.interface';
+export type {
+  AgentAction,
+  AgentActionDef,
+  AgentActionResult,
+  ActionParameter,
+} from './lib/core/world/agent-action.model';
+export type {
+  WorldEntry,
+  WorldSnapshot,
+  ToolDefinition,
+  SnapshotConfig,
+} from './lib/core/world/world-entry.interface';
 
 // Core — Harness (values)
 export { AgentHarness } from './lib/core/harness/agent-harness.service';
 export { LLM_PROVIDER } from './lib/core/providers/llm-provider.token';
 
 // Core — Harness (types)
-export type { AgentStep, RunCycleConfig, ConversationHistory } from './lib/core/harness/agent-harness.service';
-export type { LLMProvider, LLMMessage, LLMStreamChunk, ToolCall } from './lib/core/harness/llm-provider.interface';
+export type {
+  AgentStep,
+  RunCycleConfig,
+  ConversationHistory,
+} from './lib/core/harness/agent-harness.service';
+export type {
+  LLMProvider,
+  LLMMessage,
+  LLMStreamChunk,
+  ToolCall,
+} from './lib/core/harness/llm-provider.interface';
 
 // Core — Approval Gate
 export { AgentApprovalService } from './lib/core/approval/agent-approval.service';
 export type { ApprovalTicket } from './lib/core/approval/agent-approval.service';
+
+// Core — Component Contract
+export type { AgenticComponent } from './lib/core/world/agentic-component.token';
+export { AGENTIC_COMPONENT } from './lib/core/world/agentic-component.token';
 
 // Directives
 export { AgenticDirective } from './lib/directives/agentic.directive';
@@ -38,7 +61,12 @@ export { TelemetryOverlayComponent } from './lib/directives/components/telemetry
 
 // Components — Facades
 export { DataTableComponent } from './lib/components/data-table/data-table.component';
-export type { DataRow, RowQuery, BulkEditOp, DataTableResult } from './lib/components/data-table/data-table.models';
+export type {
+  DataRow,
+  RowQuery,
+  BulkEditOp,
+  DataTableResult,
+} from './lib/components/data-table/data-table.models';
 
 // Components — Approval
 export { AgentApprovalDialogComponent } from './lib/components/approval-dialog/agent-approval-dialog.component';

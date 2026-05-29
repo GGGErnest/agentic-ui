@@ -1,0 +1,36 @@
+<div
+  class="modal-backdrop"
+  agentic
+  agenticId="task-form-modal"
+  role="Task Form Modal"
+  [actions]="modalActions"
+  (click)="cancelled.emit()"
+>
+  <div class="modal" (click)="$event.stopPropagation()">
+    <h2>{{ editId() ? '✏️ Edit Task' : '➕ New Task' }}</h2>
+    <label>Title</label>
+    <input type="text" [ngModel]="formTitle()" (ngModelChange)="formTitle.set($event)" />
+    <label>Priority</label>
+    <select [ngModel]="formPriority()" (ngModelChange)="formPriority.set($event)">
+      <option value="low">Low</option>
+      <option value="medium">Medium</option>
+      <option value="high">High</option>
+    </select>
+    <label>Assignee</label>
+    <input type="text" [ngModel]="formAssignee()" (ngModelChange)="formAssignee.set($event)" />
+    <div class="modal-actions">
+      <button type="button" class="btn btn-secondary" (click)="cancelled.emit()">Cancel</button>
+      <button
+        type="button"
+        class="btn btn-primary"
+        agentic
+        [agenticId]="editId() ? 'save-edit-btn' : 'save-add-btn'"
+        role="Modal - Action Button"
+        [actions]="saveButtonActions"
+        (click)="submit()"
+      >
+        {{ editId() ? 'Save Changes' : 'Create Task' }}
+      </button>
+    </div>
+  </div>
+</div>

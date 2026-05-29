@@ -139,6 +139,59 @@ describe('AgentHarness', () => {
     });
   });
 
+  // ========== chatTurns ==========
+
+  describe('chatTurns', () => {
+    it('should add one turn per runCycle call', async () => {
+      vi.mocked(mockLLM.getStream).mockReturnValue(new AsyncIterableChunks([
+        { type: 'thought', text: 'Thinking...' },
+      ]));
+
+      await harness.runCycle('First prompt');
+
+      expect(harness.chatTurns()).toHaveLength(1);
+      expect(harness.chatTurns()[0].userMessage).toBe('First prompt');
+    });
+
+    it('should accumulate turns across multiple runCycle calls', async () => {
+      vi.mocked(mockLLM.getStream).mockReturnValue(new AsyncIterableChunks([
+        { type: 'thought', text: 'Done.' },
+      ]));
+
+      await harness.runCycle('First');
+      await harness.runCycle('Second');
+
+      expect(harness.chatTurns()).toHaveLength(2);
+      expect(harness.chatTurns()[1].userMessage).toBe('Second');
+    });
+
+    it('should group steps produced by a cycle into the matching turn', async () => {
+      vi.mocked(mockLLM.getStream).mockReturnValue(new AsyncIterableChunks([
+        { type: 'thought', text: 'Reasoning only.' },
+      ]));
+
+      await harness.runCycle('What is the status?');
+
+      const turn = harness.chatTurns()[0];
+      expect(turn.steps).toHaveLength(1);
+      expect(turn.steps[0].action).toBeNull();
+      expect(turn.steps[0].result).toContain('No action taken');
+    });
+
+    it('should keep turn steps in sync with harness.steps()', async () => {
+      vi.mocked(mockLLM.getStream).mockReturnValue(new AsyncIterableChunks([
+        { type: 'thought', text: 'Reasoning only.' },
+      ]));
+
+      await harness.runCycle('Check');
+
+      const allSteps = harness.steps();
+      const turnSteps = harness.chatTurns()[0].steps;
+      expect(turnSteps).toHaveLength(allSteps.length);
+      expect(turnSteps[0].timestamp).toBe(allSteps[0].timestamp);
+    });
+  });
+
   // ========== runCycle — Tool Dispatch ==========
 
   describe('runCycle — tool dispatch', () => {

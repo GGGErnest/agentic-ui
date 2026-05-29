@@ -62,6 +62,15 @@ export class AgentHarness {
   /** Chat turns (user message + agent steps) for the UI. */
   readonly chatTurns = signal<ChatTurn[]>([]);
 
+  private appendStepToCurrentTurn(step: AgentStep): void {
+    this.steps.update((s) => [...s, step]);
+    this.chatTurns.update((turns) => {
+      if (turns.length === 0) return turns;
+      const last = turns[turns.length - 1];
+      return [...turns.slice(0, -1), { ...last, steps: [...last.steps, step] }];
+    });
+  }
+
   /** Whether the agent is currently running a cycle. */
   readonly isRunning = signal<boolean>(false);
 
@@ -138,6 +147,10 @@ export class AgentHarness {
     try {
       // Add user message to history
       this.messages.push({ role: 'user', content: userPrompt });
+      this.chatTurns.update((turns) => [
+        ...turns,
+        { userMessage: userPrompt, steps: [], timestamp: Date.now() },
+      ]);
 
       let cycleCount = 0;
       const MAX_CYCLES = 5;
@@ -183,15 +196,12 @@ export class AgentHarness {
 
         // If aborted externally (by signal, not timeout)
         if (abort.signal.aborted && config.signal?.aborted) {
-          this.steps.update((s) => [
-            ...s,
-            {
-              thought: this.thought(),
-              action: null,
-              result: 'Cycle aborted by user.',
-              timestamp: Date.now(),
-            },
-          ]);
+          this.appendStepToCurrentTurn({
+            thought: this.thought(),
+            action: null,
+            result: 'Cycle aborted by user.',
+            timestamp: Date.now(),
+          });
           return;
         }
 
@@ -226,15 +236,12 @@ export class AgentHarness {
           }
 
           // Record the step
-          this.steps.update((s) => [
-            ...s,
-            {
-              thought: thoughtText,
-              action: `${actionName}(${JSON.stringify(args)})`,
-              result: result.message,
-              timestamp: Date.now(),
-            },
-          ]);
+          this.appendStepToCurrentTurn({
+            thought: thoughtText,
+            action: `${actionName}(${JSON.stringify(args)})`,
+            result: result.message,
+            timestamp: Date.now(),
+          });
 
           // Trim payload payload length down to a maximum threshold limit before sending across to prompt buffer
           let serializedResult = JSON.stringify(result);
@@ -257,15 +264,12 @@ export class AgentHarness {
 
         // If no tool calls, the agent is done, break the while loop
         if (dispatchable.length === 0) {
-          this.steps.update((s) => [
-            ...s,
-            {
-              thought: thoughtText,
-              action: null,
-              result: 'No action taken.',
-              timestamp: Date.now(),
-            },
-          ]);
+          this.appendStepToCurrentTurn({
+            thought: thoughtText,
+            action: null,
+            result: 'No action taken.',
+            timestamp: Date.now(),
+          });
           break;
         } else {
           // Tools were executed, continue loop to let LLM observe observation results
@@ -274,15 +278,12 @@ export class AgentHarness {
         }
       } // <-- END OF REACT WHILE LOOP
     } catch (error) {
-      this.steps.update((s) => [
-        ...s,
-        {
-          thought: '',
-          action: null,
-          result: `Error: ${error instanceof Error ? error.message : String(error)}`,
-          timestamp: Date.now(),
-        },
-      ]);
+      this.appendStepToCurrentTurn({
+        thought: '',
+        action: null,
+        result: `Error: ${error instanceof Error ? error.message : String(error)}`,
+        timestamp: Date.now(),
+      });
     } finally {
       this.isRunning.set(false);
     }

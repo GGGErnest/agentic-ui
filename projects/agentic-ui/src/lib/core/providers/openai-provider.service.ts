@@ -77,7 +77,6 @@ If no action is needed, explain why. Be precise with tool arguments.`,
       max_tokens: this.maxTokens,
       temperature: this.temperature,
       stream: true,
-      stream_options: { include_usage: true },
     };
 
     // Only include tools if there are any

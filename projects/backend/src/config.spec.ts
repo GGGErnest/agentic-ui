@@ -23,7 +23,23 @@ describe('loadBackendConfig', () => {
       litellmUpstreamApiBase: 'https://opencode.ai/zen/go/v1',
       litellmUpstreamApiKey: 'go-key',
       litellmUpstreamLitellmModel: 'openai/deepseek-v4-pro',
+      logLevel: 'info',
     });
+  });
+
+  it('throws when LOG_LEVEL is an invalid value', () => {
+    expect(() =>
+      loadBackendConfig({
+        DEMO_CLIENT_TOKEN: 'agentic-ui-demo',
+        LITELLM_BASE_URL: 'http://localhost:8000/v1',
+        LITELLM_API_KEY: 'litellm-local-key',
+        LITELLM_MODEL: 'agentic-demo',
+        LITELLM_UPSTREAM_API_BASE: 'https://opencode.ai/zen/go/v1',
+        LITELLM_UPSTREAM_API_KEY: 'go-key',
+        LITELLM_UPSTREAM_LITELLM_MODEL: 'openai/deepseek-v4-pro',
+        LOG_LEVEL: 'trace',
+      } as NodeJS.ProcessEnv)
+    ).toThrow('Invalid LOG_LEVEL "trace". Must be "info" or "debug".');
   });
 
   it('throws when required upstream LiteLLM settings are missing', () => {

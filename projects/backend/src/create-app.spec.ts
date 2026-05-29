@@ -19,7 +19,8 @@ describe('Backend App', () => {
       litellmModel: 'agentic-demo',
       litellmUpstreamApiBase: 'https://opencode.ai/zen/go/v1',
       litellmUpstreamApiKey: 'go-key',
-      litellmUpstreamModel: 'deepseek-v4-pro',
+      litellmUpstreamLitellmModel: 'deepseek-v4-pro',
+      logLevel: 'info',
     };
     mockFetch = vi.fn();
     app = createApp(config, mockFetch as unknown as typeof fetch);

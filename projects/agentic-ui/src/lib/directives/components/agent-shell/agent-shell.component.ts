@@ -76,7 +76,7 @@ import { AgentApprovalDialogComponent } from '../../../components/approval-dialo
               </div>
             }
 
-            @for (turn of harness.chatTurns(); track turn.timestamp) {
+            @for (turn of harness.chatTurns(); track turn.timestamp; let last = $last) {
               <div class="agent-shell__user-message">{{ turn.userMessage }}</div>
 
               @for (step of turn.steps; track step.timestamp) {
@@ -94,16 +94,22 @@ import { AgentApprovalDialogComponent } from '../../../components/approval-dialo
                   }
                 </div>
               }
-            }
 
-            @if (harness.thought(); as liveThought) {
-              <div class="agent-shell__thought-stream">
-                <div class="agent-shell__thought-stream-header">
-                  <span class="pulse-spark"></span>
-                  <span class="label">Agent Stream Processing...</span>
+              @if (last && harness.isRunning() && turn.steps.length === 0 && !harness.thought()) {
+                <div class="agent-shell__turn-loading">
+                  <div class="spinner-ring"></div>
                 </div>
-                <div class="agent-shell__thought-stream-body">{{ liveThought }}</div>
-              </div>
+              }
+
+              @if (last && harness.thought(); as liveThought) {
+                <div class="agent-shell__thought-stream">
+                  <div class="agent-shell__thought-stream-header">
+                    <span class="pulse-spark"></span>
+                    <span class="label">Agent Stream Processing...</span>
+                  </div>
+                  <div class="agent-shell__thought-stream-body">{{ liveThought }}</div>
+                </div>
+              }
             }
           </div>
 
@@ -204,6 +210,11 @@ import { AgentApprovalDialogComponent } from '../../../components/approval-dialo
       max-width: 85%;
       margin-bottom: 8px;
       word-break: break-word;
+    }
+    .agent-shell__turn-loading {
+      display: flex;
+      align-items: center;
+      padding: 8px 4px;
     }
     .agent-shell__step {
       background: #161b22; border: 1px solid #21262d; border-radius: 8px;

@@ -12,6 +12,7 @@ export interface BackendConfig {
   litellmUpstreamApiBase: string;
   litellmUpstreamApiKey: string;
   litellmUpstreamLitellmModel: string;
+  logLevel: 'info' | 'debug';
 }
 
 export function loadBackendConfig(env: NodeJS.ProcessEnv): BackendConfig {
@@ -35,6 +36,11 @@ export function loadBackendConfig(env: NodeJS.ProcessEnv): BackendConfig {
     ? env['LITELLM_UPSTREAM_API_BASE']!.slice(0, -1)
     : env['LITELLM_UPSTREAM_API_BASE']!;
 
+  const logLevel = env['LOG_LEVEL'];
+  if (logLevel && logLevel !== 'info' && logLevel !== 'debug') {
+    throw new Error(`Invalid LOG_LEVEL "${logLevel}". Must be "info" or "debug".`);
+  }
+
   return {
     port: parseInt(env['BACKEND_PORT'] || '3000', 10),
     corsOrigin: env['DEMO_CORS_ORIGIN'] || 'http://localhost:4200',
@@ -45,5 +51,6 @@ export function loadBackendConfig(env: NodeJS.ProcessEnv): BackendConfig {
     litellmUpstreamApiBase,
     litellmUpstreamApiKey: env['LITELLM_UPSTREAM_API_KEY']!,
     litellmUpstreamLitellmModel: env['LITELLM_UPSTREAM_LITELLM_MODEL']!,
+    logLevel: logLevel ?? 'info',
   };
 }

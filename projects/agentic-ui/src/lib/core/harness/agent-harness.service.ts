@@ -206,13 +206,20 @@ export class AgentHarness {
           return;
         }
 
-        const thoughtText = this.thought();
-        if (thoughtText) {
-          this.messages.push({ role: 'assistant', content: thoughtText });
-        }
-
-        // Dispatch tool calls (capped by maxSteps)
+        // Cap dispatched tool calls first — assistant message must mirror exactly what is executed
         const dispatchable = toolCalls.slice(0, maxSteps);
+
+        const thoughtText = this.thought();
+        const assistantMessage: LLMMessage = { role: 'assistant', content: thoughtText };
+        if (dispatchable.length > 0) {
+          assistantMessage.tool_calls = dispatchable.map((tc) => ({
+            ...tc,
+            type: 'function' as const,
+          }));
+        }
+        if (thoughtText || dispatchable.length > 0) {
+          this.messages.push(assistantMessage);
+        }
         for (const toolCall of dispatchable) {
           // Optimized check timeout threshold from 5s down to 500ms to ignore websocket / polling blocks
           await this.waitForStableWithTimeout(500);

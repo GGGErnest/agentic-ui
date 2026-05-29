@@ -297,6 +297,34 @@ describe('AgentHarness', () => {
       expect(executeClick).toHaveBeenCalled();
       expect(harness.steps()).toHaveLength(3);
     });
+
+    it('should only include dispatched tool calls in assistant message when maxSteps is exceeded', async () => {
+      world.register({
+        id: 'btn-b',
+        role: 'Button',
+        actions: [{ name: 'click', description: 'Click', execute: vi.fn().mockResolvedValue({ success: true, message: 'Clicked B' }) }],
+      });
+
+      vi.mocked(mockLLM.getStream)
+        .mockImplementationOnce(() => new AsyncIterableChunks([
+          { type: 'tool_call', data: { id: 'call_1', function: { name: 'add-btn__addTask', arguments: '{}' } } },
+          { type: 'tool_call', data: { id: 'call_2', function: { name: 'btn-b__click', arguments: '{}' } } },
+        ]))
+        .mockImplementation(() => new AsyncIterableChunks([{ type: 'thought', text: 'Done.' }]));
+
+      await harness.runCycle('Do both but limit to 1', { maxSteps: 1 });
+
+      const assistantMsg = harness['messages'].find(
+        (m): m is LLMMessage & { tool_calls: ToolCall[] } =>
+          m.role === 'assistant' && Array.isArray((m as LLMMessage).tool_calls),
+      )!;
+      expect(assistantMsg.tool_calls).toHaveLength(1);
+      expect(assistantMsg.tool_calls[0].id).toBe('call_1');
+
+      const toolMsgs = harness['messages'].filter((m) => m.role === 'tool');
+      expect(toolMsgs).toHaveLength(1);
+      expect(toolMsgs[0].tool_call_id).toBe('call_1');
+    });
   });
 
   // ========== Stability Gating ==========

@@ -1,6 +1,4 @@
-/**
- * Backend configuration loader and validator.
- */
+/** Backend configuration loader and validator. */
 
 export interface BackendConfig {
   port: number;
@@ -9,32 +7,20 @@ export interface BackendConfig {
   litellmBaseUrl: string;
   litellmApiKey: string;
   litellmModel: string;
-  litellmUpstreamApiBase: string;
-  litellmUpstreamApiKey: string;
-  litellmUpstreamLitellmModel: string;
   logLevel: 'info' | 'debug';
 }
 
 export function loadBackendConfig(env: NodeJS.ProcessEnv): BackendConfig {
-  const requiredVars = [
-    'DEMO_CLIENT_TOKEN',
-    'LITELLM_BASE_URL',
-    'LITELLM_API_KEY',
-    'LITELLM_MODEL',
-    'LITELLM_UPSTREAM_API_BASE',
-    'LITELLM_UPSTREAM_API_KEY',
-    'LITELLM_UPSTREAM_LITELLM_MODEL',
-  ];
+  const requiredVars = ['DEMO_CLIENT_TOKEN', 'LITELLM_BASE_URL', 'LITELLM_API_KEY', 'LITELLM_MODEL'];
   const missing = requiredVars.filter((v) => !env[v]);
 
   if (missing.length > 0) {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}`);
   }
 
-  const litellmBaseUrl = env['LITELLM_BASE_URL']!.endsWith('/') ? env['LITELLM_BASE_URL']!.slice(0, -1) : env['LITELLM_BASE_URL']!;
-  const litellmUpstreamApiBase = env['LITELLM_UPSTREAM_API_BASE']!.endsWith('/')
-    ? env['LITELLM_UPSTREAM_API_BASE']!.slice(0, -1)
-    : env['LITELLM_UPSTREAM_API_BASE']!;
+  const litellmBaseUrl = env['LITELLM_BASE_URL']!.endsWith('/')
+    ? env['LITELLM_BASE_URL']!.slice(0, -1)
+    : env['LITELLM_BASE_URL']!;
 
   const logLevel = env['LOG_LEVEL'];
   if (logLevel && logLevel !== 'info' && logLevel !== 'debug') {
@@ -48,9 +34,6 @@ export function loadBackendConfig(env: NodeJS.ProcessEnv): BackendConfig {
     litellmBaseUrl,
     litellmApiKey: env['LITELLM_API_KEY']!,
     litellmModel: env['LITELLM_MODEL']!,
-    litellmUpstreamApiBase,
-    litellmUpstreamApiKey: env['LITELLM_UPSTREAM_API_KEY']!,
-    litellmUpstreamLitellmModel: env['LITELLM_UPSTREAM_LITELLM_MODEL']!,
     logLevel: logLevel ?? 'info',
   };
 }

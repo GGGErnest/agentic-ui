@@ -103,11 +103,36 @@ export class AgentHarness {
     const BOUNDARY_LIMIT = 15;
     let slicedMessages = this.messages.slice(-BOUNDARY_LIMIT);
 
-    // Safeguard for strict alternating providers (like DeepSeek): If the truncation
-    // slice cuts mid-turn and leaves an orphaned 'tool' role response at the front
-    // of the history without its preceding 'tool_calls', shift the boundary past it.
-    while (slicedMessages.length > 0 && slicedMessages[0].role === 'tool') {
-      slicedMessages.shift();
+    // Repair loop: repeatedly strip invalid leading messages until the slice starts
+    // with a valid turn boundary.  Two cases:
+    //   1. Leading 'tool' message — its assistant-with-tool_calls was sliced away.
+    //   2. Leading 'assistant' message with tool_calls — one or more of its 'tool'
+    //      result messages were sliced away (occurs after importing pre-fix state).
+    let repaired = true;
+    while (repaired && slicedMessages.length > 0) {
+      repaired = false;
+
+      // Case 1: orphaned tool response
+      if (slicedMessages[0].role === 'tool') {
+        slicedMessages.shift();
+        repaired = true;
+        continue;
+      }
+
+      // Case 2: assistant with unsatisfied tool_calls
+      const first = slicedMessages[0];
+      if (first.role === 'assistant' && first.tool_calls && first.tool_calls.length > 0) {
+        const satisfiedIds = new Set(
+          slicedMessages
+            .filter((m) => m.role === 'tool' && m.tool_call_id)
+            .map((m) => m.tool_call_id!),
+        );
+        const allSatisfied = first.tool_calls.every((tc) => satisfiedIds.has(tc.id));
+        if (!allSatisfied) {
+          slicedMessages.shift();
+          repaired = true;
+        }
+      }
     }
 
     return {

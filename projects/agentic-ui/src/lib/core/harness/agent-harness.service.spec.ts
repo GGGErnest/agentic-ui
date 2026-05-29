@@ -498,6 +498,40 @@ describe('AgentHarness', () => {
       expect(harness['systemPrompt']).toBe('System');
       expect(harness['messages']).toHaveLength(2);
     });
+
+    it('should strip a leading assistant message whose tool_calls have no matching tool responses in the slice', () => {
+      harness['messages'] = [
+        {
+          role: 'assistant',
+          content: 'I will click.',
+          tool_calls: [{ id: 'call_x', type: 'function' as const, function: { name: 'btn__click', arguments: '{}' } }],
+        },
+        { role: 'user', content: 'What did you do?' },
+        { role: 'assistant', content: 'I clicked.' },
+      ];
+
+      const conv = harness.exportConversation();
+
+      expect(conv.messages[0].role).toBe('user');
+      expect(conv.messages).toHaveLength(2);
+    });
+
+    it('should NOT strip a leading assistant message whose tool_calls are fully satisfied', () => {
+      harness['messages'] = [
+        {
+          role: 'assistant',
+          content: 'I will click.',
+          tool_calls: [{ id: 'call_x', type: 'function' as const, function: { name: 'btn__click', arguments: '{}' } }],
+        },
+        { role: 'tool', content: '{"success":true}', tool_call_id: 'call_x' },
+        { role: 'user', content: 'Great.' },
+      ];
+
+      const conv = harness.exportConversation();
+
+      expect(conv.messages[0].role).toBe('assistant');
+      expect(conv.messages).toHaveLength(3);
+    });
   });
 
   // ========== Approval Integration ==========

@@ -1,0 +1,102 @@
+import { Component } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
+import { AgenticDirective } from './agentic.directive';
+import { AgentWorldService } from '../core/world/agent-world.service';
+import { AGENTIC_COMPONENT, AgenticComponent } from '../core/world/agentic-component.token';
+import { AgentAction } from '../core/world/agent-action.model';
+
+function makeAction(name: string): AgentAction {
+  return { name, description: 'test', execute: async () => ({ success: true, message: 'ok' }) };
+}
+
+@Component({
+  selector: 'test-host',
+  standalone: true,
+  imports: [AgenticDirective],
+  template: `<div agentic></div>`,
+  providers: [{ provide: AGENTIC_COMPONENT, useExisting: TestHostComponent }],
+})
+class TestHostComponent implements AgenticComponent {
+  agenticId = 'host-id';
+  agenticRole = 'TestHost';
+  agenticActions: AgentAction[] = [makeAction('doSomething')];
+}
+
+@Component({
+  selector: 'test-native',
+  standalone: true,
+  imports: [AgenticDirective],
+  template: `<button agentic agenticId="btn-id" [actions]="acts">Click</button>`,
+})
+class TestNativeComponent {
+  acts: AgentAction[] = [makeAction('click')];
+}
+
+@Component({
+  selector: 'test-no-id',
+  standalone: true,
+  imports: [AgenticDirective],
+  template: `<button agentic [actions]="acts">Click</button>`,
+})
+class TestNoIdComponent {
+  acts: AgentAction[] = [makeAction('click')];
+}
+
+describe('AgenticDirective', () => {
+  let world: AgentWorldService;
+
+  beforeEach(() => {
+    TestBed.configureTestingModule({ providers: [AgentWorldService] });
+    world = TestBed.inject(AgentWorldService);
+  });
+
+  it('registers host component via AGENTIC_COMPONENT token', () => {
+    const fixture = TestBed.createComponent(TestHostComponent);
+    fixture.detectChanges();
+    const entry = world.entries().get('host-id');
+    expect(entry).toBeDefined();
+    expect(entry!.role).toBe('TestHost');
+    expect(entry!.actions[0].name).toBe('doSomething');
+  });
+
+  it('unregisters host component on destroy', () => {
+    const fixture = TestBed.createComponent(TestHostComponent);
+    fixture.detectChanges();
+    fixture.destroy();
+    expect(world.entries().has('host-id')).toBe(false);
+  });
+
+  it('registers native element via template inputs', () => {
+    const fixture = TestBed.createComponent(TestNativeComponent);
+    fixture.detectChanges();
+    const entry = world.entries().get('btn-id');
+    expect(entry).toBeDefined();
+    expect(entry!.actions[0].name).toBe('click');
+  });
+
+  it('auto-generates UUID when agenticId input and token are absent', () => {
+    const fixture = TestBed.createComponent(TestNoIdComponent);
+    fixture.detectChanges();
+    const entries = [...world.entries().keys()];
+    expect(entries.length).toBe(1);
+    expect(entries[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  });
+
+  it('agenticId input overrides token agenticId', () => {
+    @Component({
+      selector: 'test-override',
+      standalone: true,
+      imports: [AgenticDirective],
+      template: `<div agentic agenticId="override-id"></div>`,
+      providers: [{ provide: AGENTIC_COMPONENT, useExisting: TestOverrideComponent }],
+    })
+    class TestOverrideComponent implements AgenticComponent {
+      agenticId = 'token-id';
+      agenticActions: AgentAction[] = [];
+    }
+    const fixture = TestBed.createComponent(TestOverrideComponent);
+    fixture.detectChanges();
+    expect(world.entries().has('override-id')).toBe(true);
+    expect(world.entries().has('token-id')).toBe(false);
+  });
+});

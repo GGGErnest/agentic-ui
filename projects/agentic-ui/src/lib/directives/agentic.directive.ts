@@ -1,23 +1,8 @@
 import { Directive, effect, ElementRef, inject, input, OnDestroy } from '@angular/core';
 import { AgentWorldService } from '../core/world/agent-world.service';
 import { AgentAction } from '../core/world/agent-action.model';
+import { AGENTIC_COMPONENT } from '../core/world/agentic-component.token';
 
-/**
- * AgenticDirective — bridges UI components to the World Registry.
- *
- * Usage:
- * ```html
- * <button [agentic] agenticId="submit-btn" role="Form Action"
- *         [actions]="[{ name: 'submit', description: 'Submit the form', execute: () => this.onSubmit() }]">
- *   Submit
- * </button>
- * ```
- *
- * The directive:
- * - Registers the component on init.
- * - Unregisters on destroy.
- * - Sets a data attribute for IntersectionObserver tracking.
- */
 @Directive({
   selector: '[agentic]',
   standalone: true,
@@ -25,27 +10,32 @@ import { AgentAction } from '../core/world/agent-action.model';
 export class AgenticDirective implements OnDestroy {
   private readonly world = inject(AgentWorldService);
   private readonly el = inject(ElementRef<HTMLElement>);
+  private readonly host = inject(AGENTIC_COMPONENT, { optional: true });
 
-  /** Unique identifier for this component instance. Required. */
-  readonly agenticId = input.required<string>();
+  readonly agenticId = input<string | undefined>(undefined);
 
-  /** Semantic role of the component (e.g., 'DataTable', 'Modal', 'Button'). */
   readonly role = input('UI Component');
 
-  /** Actions this component exposes to the AI agent. */
   readonly actions = input<AgentAction[]>([]);
 
-  /** Arbitrary metadata for facade components. */
   readonly metadata = input<Record<string, unknown>>({});
 
   private registeredId: string | null = null;
 
   constructor() {
     effect(() => {
-      const id = this.agenticId();
-      const role = this.role();
-      const actions = this.actions();
-      const metadata = this.metadata();
+      const inputId = this.agenticId();
+      const host = this.host;
+
+      const id =
+        inputId ??
+        host?.agenticId ??
+        (this.el.nativeElement.id || undefined) ??
+        crypto.randomUUID();
+
+      const role = host ? (host.agenticRole ?? 'UI Component') : this.role();
+      const actions = host ? host.agenticActions : this.actions();
+      const metadata = host ? (host.agenticMetadata ?? {}) : this.metadata();
 
       this.el.nativeElement.setAttribute('data-agentic-id', id);
 
@@ -53,13 +43,7 @@ export class AgenticDirective implements OnDestroy {
         this.world.unregister(this.registeredId);
       }
 
-      this.world.register({
-        id,
-        role,
-        actions,
-        element: this.el.nativeElement,
-        metadata,
-      });
+      this.world.register({ id, role, actions, element: this.el.nativeElement, metadata });
 
       this.registeredId = id;
     });

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, effect, input, output, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, input, linkedSignal, output } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { AgenticDirective, AgentAction } from 'agentic-ui';
 
@@ -88,21 +88,9 @@ export class TaskFormModalComponent {
   readonly saved = output<TaskFormValue>();
   readonly cancelled = output<void>();
 
-  readonly formTitle = signal('');
-  readonly formPriority = signal<'low' | 'medium' | 'high'>('medium');
-  readonly formAssignee = signal('');
-
-  constructor() {
-    effect(() => {
-      this.formTitle.set(this.initialTitle());
-    });
-    effect(() => {
-      this.formPriority.set(this.initialPriority());
-    });
-    effect(() => {
-      this.formAssignee.set(this.initialAssignee());
-    });
-  }
+  readonly formTitle = linkedSignal(() => this.initialTitle());
+  readonly formPriority = linkedSignal(() => this.initialPriority());
+  readonly formAssignee = linkedSignal(() => this.initialAssignee());
 
   readonly modalActions: AgentAction[] = [
     {
@@ -149,8 +137,8 @@ export class TaskFormModalComponent {
 
   readonly saveButtonActions: AgentAction[] = [
     {
-      name: 'submitForm',
-      description: 'Submit and save the current form data.',
+      name: 'clickSaveButton',
+      description: 'Click the save button to submit and persist the current form data.',
       execute: async () => {
         const result = this.submit();
         if (result) {

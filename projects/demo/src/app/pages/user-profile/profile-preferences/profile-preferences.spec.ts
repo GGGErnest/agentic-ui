@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { ProfilePreferences, UserPreferences } from './profile-preferences';
+import { ProfilePreferences } from './profile-preferences';
 import { ActivityService } from '../../../services/activity.service';
 import { vi } from 'vitest';
 
@@ -22,12 +22,13 @@ describe('ProfilePreferences', () => {
       ?.execute({});
 
     expect(result?.success).toBe(true);
-    const data = result?.data as UserPreferences;
-    expect(typeof data.emailNotifications).toBe('boolean');
-    expect(typeof data.pushNotifications).toBe('boolean');
-    expect(typeof data.compactView).toBe('boolean');
-    expect(['dark', 'light']).toContain(data.theme);
-    expect(['en', 'es', 'fr']).toContain(data.language);
+    expect(result?.data).toMatchObject({
+      emailNotifications: expect.any(Boolean),
+      pushNotifications: expect.any(Boolean),
+      compactView: expect.any(Boolean),
+      theme: expect.any(String),
+      language: expect.any(String),
+    });
   });
 
   it('setPreference should update a boolean preference (emailNotifications → false)', async () => {

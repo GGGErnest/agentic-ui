@@ -182,27 +182,27 @@ export class ProfilePreferences implements AgenticComponent {
     } satisfies AgentAction,
   ];
 
-  onEmailNotificationsChange(value: boolean): void {
-    this.agenticActions
-      .find((a) => a.name === 'setPreference')
-      ?.execute({ key: 'emailNotifications', value });
+  private setPref(key: keyof UserPreferences, value: unknown): void {
+    this.agenticActions.find((a) => a.name === 'setPreference')?.execute({ key, value });
   }
 
-  onPushNotificationsChange(value: boolean): void {
-    this.agenticActions
-      .find((a) => a.name === 'setPreference')
-      ?.execute({ key: 'pushNotifications', value });
+  onEmailNotificationsChange(event: Event): void {
+    this.setPref('emailNotifications', (event.target as HTMLInputElement).checked);
   }
 
-  onCompactViewChange(value: boolean): void {
-    this.agenticActions.find((a) => a.name === 'setPreference')?.execute({ key: 'compactView', value });
+  onPushNotificationsChange(event: Event): void {
+    this.setPref('pushNotifications', (event.target as HTMLInputElement).checked);
   }
 
-  onThemeChange(value: string): void {
-    this.agenticActions.find((a) => a.name === 'setPreference')?.execute({ key: 'theme', value });
+  onCompactViewChange(event: Event): void {
+    this.setPref('compactView', (event.target as HTMLInputElement).checked);
   }
 
-  onLanguageChange(value: string): void {
-    this.agenticActions.find((a) => a.name === 'setPreference')?.execute({ key: 'language', value });
+  onThemeChange(event: Event): void {
+    this.setPref('theme', (event.target as HTMLSelectElement).value);
+  }
+
+  onLanguageChange(event: Event): void {
+    this.setPref('language', (event.target as HTMLSelectElement).value);
   }
 }

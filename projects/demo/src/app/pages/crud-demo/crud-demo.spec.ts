@@ -147,4 +147,40 @@ describe('CrudDemo', () => {
     expect(component.tasks().some((t) => t.id === '3')).toBe(false);
     expect(component.tasks().some((t) => t.id === '2')).toBe(true);
   });
+
+  it('openEditModal populates form signals and opens the modal', () => {
+    const task = component.tasks()[0];
+    component.openEditModal(task);
+
+    expect(component.showModal()).toBe(true);
+    expect(component.editId()).toBe('1');
+    expect(component.formTitle()).toBe('Fix login bug');
+    expect(component.formPriority()).toBe('high');
+    expect(component.formAssignee()).toBe('Alice');
+    expect(component.formStatus()).toBe('in-progress');
+  });
+
+  it('openEditModal does not open the modal when the row id is not found', () => {
+    component.openEditModal({ id: 'does-not-exist', title: 'Ghost' });
+    expect(component.showModal()).toBe(false);
+  });
+
+  it('openAddModal resets formStatus to todo', () => {
+    component.formStatus.set('done');
+    component.openAddModal();
+    expect(component.formStatus()).toBe('todo');
+  });
+
+  it('onFormSaved updates status on the edited task', () => {
+    component.editId.set('3');
+    component.onFormSaved({
+      title: 'Update docs v2',
+      priority: 'low',
+      assignee: 'Charlie',
+      status: 'in-progress',
+    });
+    const updated = component.tasks().find((t) => t.id === '3');
+    expect(updated?.title).toBe('Update docs v2');
+    expect(updated?.status).toBe('in-progress');
+  });
 });

@@ -1,12 +1,4 @@
-import {
-  Component,
-  computed,
-  EventEmitter,
-  input,
-  Output,
-  output,
-  signal,
-} from '@angular/core';
+import { Component, computed, EventEmitter, input, Output, output, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AgentAction, AgentActionResult } from '../../core/world/agent-action.model';
 import { AGENTIC_COMPONENT } from '../../core/world/agentic-component.token';
@@ -66,7 +58,9 @@ import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.mod
               }
               @if (showEditButton()) {
                 <td>
-                  <button class="row-edit-btn" type="button" (click)="rowEdit.emit(row)">Edit</button>
+                  <button class="row-edit-btn" type="button" (click)="rowEdit.emit(row)">
+                    Edit
+                  </button>
                 </td>
               }
               <td>
@@ -166,7 +160,6 @@ import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.mod
   ],
 })
 export class DataTableComponent {
-
   // ---- Inputs ----
 
   readonly agenticId = input.required<string>();

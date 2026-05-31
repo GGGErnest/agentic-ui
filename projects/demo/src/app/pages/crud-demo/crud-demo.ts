@@ -6,6 +6,7 @@ import {
   AgentAction,
   AgentActionResult,
   AgentWorldService,
+  DataRow,
 } from 'agentic-ui';
 
 import { TaskToolbarComponent } from './task-toolbar/task-toolbar';
@@ -71,6 +72,7 @@ export class CrudDemo {
   readonly formTitle = signal('');
   readonly formPriority = signal<Task['priority']>('medium');
   readonly formAssignee = signal('');
+  readonly formStatus = signal<Task['status']>('todo');
 
   // ---- Filter state ----
   readonly activeFilter = signal<string | null>(null);
@@ -124,6 +126,20 @@ export class CrudDemo {
     this.formTitle.set('');
     this.formPriority.set('medium');
     this.formAssignee.set('');
+    this.formStatus.set('todo');
+    this.showModal.set(true);
+  }
+
+  openEditModal(row: DataRow): void {
+    const task = this.tasks().find((t) => t.id === String(row['id']));
+    if (!task) {
+      return;
+    }
+    this.editId.set(task.id);
+    this.formTitle.set(task.title);
+    this.formPriority.set(task.priority);
+    this.formAssignee.set(task.assignee);
+    this.formStatus.set(task.status);
     this.showModal.set(true);
   }
 
@@ -155,7 +171,13 @@ export class CrudDemo {
       this.tasks.update((list) =>
         list.map((t) =>
           t.id === this.editId()
-            ? { ...t, title: value.title, priority: value.priority, assignee: value.assignee }
+            ? {
+                ...t,
+                title: value.title,
+                priority: value.priority,
+                assignee: value.assignee,
+                status: value.status,
+              }
             : t,
         ),
       );

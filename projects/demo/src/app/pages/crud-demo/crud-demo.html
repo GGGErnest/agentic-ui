@@ -32,8 +32,10 @@
     [columns]="['title', 'priority', 'status', 'assignee']"
     [data]="tasks()"
     idField="id"
+    [showEditButton]="true"
     (selectionChange)="onTableSelectionChange($event)"
     (rowsDeleted)="onRowsDeleted($event)"
+    (rowEdit)="openEditModal($event)"
   />
 
   @if (showModal()) {
@@ -43,6 +45,7 @@
       [initialTitle]="formTitle()"
       [initialPriority]="formPriority()"
       [initialAssignee]="formAssignee()"
+      [initialStatus]="formStatus()"
       (saved)="onFormSaved($event)"
       (cancelled)="closeModal()"
     />

@@ -21,7 +21,6 @@ const MOCK_PROFILE: UserProfileData = {
 
 @Component({
   selector: 'app-profile-identity',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule],
   templateUrl: './profile-identity.html',
@@ -60,6 +59,11 @@ const MOCK_PROFILE: UserProfileData = {
       .identity-role {
         font-size: 13px;
         color: #8b949e;
+      }
+      .section-heading {
+        margin: 0 0 16px;
+        font-size: 18px;
+        color: #e6edf3;
       }
       .field-row {
         margin-bottom: 14px;
@@ -130,6 +134,103 @@ export class ProfileIdentity implements AgenticComponent {
   readonly editRole = signal('');
   readonly editDepartment = signal('');
 
+  readonly agenticActions: AgentAction[] = [
+    {
+      name: 'getProfile',
+      description: 'Retrieve the current user profile data.',
+      execute: async () => ({
+        success: true,
+        data: { ...this.profile() },
+        message: 'Profile retrieved successfully.',
+      }),
+    } satisfies AgentAction,
+    {
+      name: 'startEdit',
+      description: 'Enter edit mode for the profile.',
+      execute: async () => {
+        this.initEditFields();
+        this.isEditing.set(true);
+        return { success: true, message: 'Edit mode enabled.' };
+      },
+    } satisfies AgentAction,
+    {
+      name: 'updateField',
+      description: 'Update a specific profile field while in edit mode.',
+      parameters: [
+        {
+          name: 'field',
+          type: 'string',
+          description: 'Field name: name, email, bio, role, or department',
+          required: true,
+          enum: ['name', 'email', 'bio', 'role', 'department'],
+        },
+        { name: 'value', type: 'string', description: 'New field value', required: true },
+      ],
+      execute: async (params) => {
+        if (!this.isEditing()) {
+          return { success: false, message: 'Must be in edit mode to update fields.' };
+        }
+        const field = typeof params?.['field'] === 'string' ? params['field'] : null;
+        const value = typeof params?.['value'] === 'string' ? params['value'] : null;
+        if (!field || value === null) {
+          return { success: false, message: 'Invalid parameters.' };
+        }
+
+        switch (field) {
+          case 'name':
+            this.editName.set(value);
+            break;
+          case 'email':
+            this.editEmail.set(value);
+            break;
+          case 'bio':
+            this.editBio.set(value);
+            break;
+          case 'role':
+            this.editRole.set(value);
+            break;
+          case 'department':
+            this.editDepartment.set(value);
+            break;
+          default:
+            return { success: false, message: `Unknown field: ${field}` };
+        }
+        return { success: true, message: `Field ${field} updated.` };
+      },
+    } satisfies AgentAction,
+    {
+      name: 'saveProfile',
+      description: 'Save profile changes and exit edit mode.',
+      execute: async () => {
+        if (!this.editName().trim()) {
+          return { success: false, message: 'Name cannot be empty.' };
+        }
+        this.profile.set({
+          name: this.editName(),
+          email: this.editEmail(),
+          bio: this.editBio(),
+          role: this.editRole(),
+          department: this.editDepartment(),
+        });
+        this.isEditing.set(false);
+        this.activityService.log({
+          type: 'profile_updated',
+          description: `Profile updated: name is now "${this.profile().name}"`,
+        });
+        return { success: true, message: 'Profile saved successfully.' };
+      },
+    } satisfies AgentAction,
+    {
+      name: 'cancelEdit',
+      description: 'Discard changes and exit edit mode.',
+      execute: async () => {
+        this.initEditFields();
+        this.isEditing.set(false);
+        return { success: true, message: 'Edit cancelled.' };
+      },
+    } satisfies AgentAction,
+  ];
+
   get initials(): string {
     const names = this.profile().name.split(' ');
     return names
@@ -139,6 +240,20 @@ export class ProfileIdentity implements AgenticComponent {
       .slice(0, 2);
   }
 
+  onEditClick(): void {
+    this.initEditFields();
+    this.isEditing.set(true);
+  }
+
+  onSaveClick(): void {
+    this.agenticActions.find((a) => a.name === 'saveProfile')?.execute({});
+  }
+
+  onCancelClick(): void {
+    this.initEditFields();
+    this.isEditing.set(false);
+  }
+
   private initEditFields(): void {
     const p = this.profile();
     this.editName.set(p.name);
@@ -146,130 +261,5 @@ export class ProfileIdentity implements AgenticComponent {
     this.editBio.set(p.bio);
     this.editRole.set(p.role);
     this.editDepartment.set(p.department);
-  }
-
-  private async saveProfileAction(): Promise<void> {
-    if (!this.editName().trim()) {
-      throw new Error('Name cannot be empty');
-    }
-    this.profile.set({
-      name: this.editName(),
-      email: this.editEmail(),
-      bio: this.editBio(),
-      role: this.editRole(),
-      department: this.editDepartment(),
-    });
-    this.isEditing.set(false);
-    this.activityService.log({
-      type: 'profile_updated',
-      description: `Profile updated for ${this.editName()}`,
-    });
-  }
-
-  get agenticActions(): AgentAction[] {
-    return [
-      {
-        name: 'getProfile',
-        description: 'Retrieve the current user profile data.',
-        execute: async () => ({
-          success: true,
-          data: { ...this.profile() },
-          message: 'Profile retrieved successfully.',
-        }),
-      } satisfies AgentAction,
-      {
-        name: 'startEdit',
-        description: 'Enter edit mode for the profile.',
-        execute: async () => {
-          this.initEditFields();
-          this.isEditing.set(true);
-          return {
-            success: true,
-            message: 'Edit mode enabled.',
-          };
-        },
-      } satisfies AgentAction,
-      {
-        name: 'updateField',
-        description: 'Update a specific profile field while in edit mode.',
-        parameters: [
-          {
-            name: 'field',
-            type: 'string',
-            description: 'Field name: name, email, bio, role, or department',
-            required: true,
-            enum: ['name', 'email', 'bio', 'role', 'department'],
-          },
-          { name: 'value', type: 'string', description: 'New field value', required: true },
-        ],
-        execute: async (params) => {
-          if (!this.isEditing()) {
-            return {
-              success: false,
-              message: 'Must be in edit mode to update fields.',
-            };
-          }
-          const field = params?.['field'] as string;
-          const value = params?.['value'] as string;
-
-          switch (field) {
-            case 'name':
-              this.editName.set(value);
-              break;
-            case 'email':
-              this.editEmail.set(value);
-              break;
-            case 'bio':
-              this.editBio.set(value);
-              break;
-            case 'role':
-              this.editRole.set(value);
-              break;
-            case 'department':
-              this.editDepartment.set(value);
-              break;
-            default:
-              return {
-                success: false,
-                message: `Unknown field: ${field}`,
-              };
-          }
-          return {
-            success: true,
-            message: `Field ${field} updated.`,
-          };
-        },
-      } satisfies AgentAction,
-      {
-        name: 'saveProfile',
-        description: 'Save profile changes and exit edit mode.',
-        execute: async () => {
-          try {
-            await this.saveProfileAction();
-            return {
-              success: true,
-              message: 'Profile saved successfully.',
-            };
-          } catch (error) {
-            return {
-              success: false,
-              message: (error as Error).message || 'Failed to save profile.',
-            };
-          }
-        },
-      } satisfies AgentAction,
-      {
-        name: 'cancelEdit',
-        description: 'Discard changes and exit edit mode.',
-        execute: async () => {
-          this.initEditFields();
-          this.isEditing.set(false);
-          return {
-            success: true,
-            message: 'Edit cancelled.',
-          };
-        },
-      } satisfies AgentAction,
-    ];
   }
 }

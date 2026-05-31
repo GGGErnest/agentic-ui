@@ -4,7 +4,7 @@
       <div class="avatar">{{ initials }}</div>
       <div>
         <div class="identity-name">{{ profile().name }}</div>
-        <div class="identity-role">{{ profile().role }} • {{ profile().department }}</div>
+        <div class="identity-role">{{ profile().role }} &middot; {{ profile().department }}</div>
       </div>
     </div>
 
@@ -19,43 +19,43 @@
     </div>
 
     <div class="actions">
-      <button type="button" class="btn btn-primary" (click)="agenticActions[1].execute({})">
+      <button type="button" class="btn btn-primary" (click)="onEditClick()">
         Edit Profile
       </button>
     </div>
   } @else {
-    <h2 style="margin: 0 0 16px; font-size: 18px; color: #e6edf3">✏️ Edit Profile</h2>
+    <h2 class="section-heading">Edit Profile</h2>
 
     <div class="field-row">
-      <label class="field-label">Name</label>
-      <input type="text" [(ngModel)]="editName" />
+      <label class="field-label" for="edit-name">Name</label>
+      <input id="edit-name" type="text" [ngModel]="editName()" (ngModelChange)="editName.set($event)" />
     </div>
 
     <div class="field-row">
-      <label class="field-label">Email</label>
-      <input type="email" [(ngModel)]="editEmail" />
+      <label class="field-label" for="edit-email">Email</label>
+      <input id="edit-email" type="email" [ngModel]="editEmail()" (ngModelChange)="editEmail.set($event)" />
     </div>
 
     <div class="field-row">
-      <label class="field-label">Bio</label>
-      <textarea [(ngModel)]="editBio"></textarea>
+      <label class="field-label" for="edit-bio">Bio</label>
+      <textarea id="edit-bio" [ngModel]="editBio()" (ngModelChange)="editBio.set($event)"></textarea>
     </div>
 
     <div class="field-row">
-      <label class="field-label">Role</label>
-      <input type="text" [(ngModel)]="editRole" />
+      <label class="field-label" for="edit-role">Role</label>
+      <input id="edit-role" type="text" [ngModel]="editRole()" (ngModelChange)="editRole.set($event)" />
     </div>
 
     <div class="field-row">
-      <label class="field-label">Department</label>
-      <input type="text" [(ngModel)]="editDepartment" />
+      <label class="field-label" for="edit-dept">Department</label>
+      <input id="edit-dept" type="text" [ngModel]="editDepartment()" (ngModelChange)="editDepartment.set($event)" />
     </div>
 
     <div class="actions">
-      <button type="button" class="btn btn-secondary" (click)="agenticActions[4].execute({})">
+      <button type="button" class="btn btn-secondary" (click)="onCancelClick()">
         Cancel
       </button>
-      <button type="button" class="btn btn-primary" (click)="agenticActions[3].execute({})">
+      <button type="button" class="btn btn-primary" (click)="onSaveClick()">
         Save Changes
       </button>
     </div>

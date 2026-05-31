@@ -4,7 +4,6 @@ import { ActivityService } from '../../../services/activity.service';
 
 @Component({
   selector: 'app-profile-activity',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './profile-activity.html',
   providers: [{ provide: AGENTIC_COMPONENT, useExisting: ProfileActivity }],

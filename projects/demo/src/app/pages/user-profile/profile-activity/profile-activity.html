@@ -7,7 +7,7 @@
     <ul class="activity-list">
       @for (event of events(); track event.id) {
         <li class="activity-item">
-          <div class="activity-dot"></div>
+          <div class="activity-dot" aria-hidden="true"></div>
           <div class="activity-content">
             <p class="activity-description">{{ event.description }}</p>
             <p class="activity-time">{{ formatTime(event.timestamp) }}</p>

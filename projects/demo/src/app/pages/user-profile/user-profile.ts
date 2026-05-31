@@ -8,7 +8,6 @@ export type ProfileTab = 'identity' | 'preferences' | 'activity';
 
 @Component({
   selector: 'app-user-profile',
-  standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [AgenticDirective, ProfileIdentity, ProfilePreferences, ProfileActivity],
   providers: [{ provide: AGENTIC_COMPONENT, useExisting: UserProfile }],

@@ -1,11 +1,11 @@
 <div class="profile-tabs">
-  <button class="tab-btn" [class.active]="activeTab() === 'identity'" (click)="activeTab.set('identity')">
+  <button type="button" class="tab-btn" [class.active]="activeTab() === 'identity'" (click)="activeTab.set('identity')">
     Identity
   </button>
-  <button class="tab-btn" [class.active]="activeTab() === 'preferences'" (click)="activeTab.set('preferences')">
+  <button type="button" class="tab-btn" [class.active]="activeTab() === 'preferences'" (click)="activeTab.set('preferences')">
     Preferences
   </button>
-  <button class="tab-btn" [class.active]="activeTab() === 'activity'" (click)="activeTab.set('activity')">
+  <button type="button" class="tab-btn" [class.active]="activeTab() === 'activity'" (click)="activeTab.set('activity')">
     Activity
   </button>
 </div>

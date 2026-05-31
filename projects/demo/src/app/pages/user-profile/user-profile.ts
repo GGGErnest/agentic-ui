@@ -42,6 +42,11 @@ export type ProfileTab = 'identity' | 'preferences' | 'activity';
         color: #e6edf3;
       }
 
+      .tab-btn:focus-visible {
+        outline: 2px solid #58a6ff;
+        outline-offset: -2px;
+      }
+
       .tab-btn.active {
         color: #e6edf3;
         border-bottom: 2px solid #58a6ff;
@@ -70,12 +75,16 @@ export class UserProfile implements AgenticComponent {
           },
         ],
         execute: async (params) => {
-          const tab = params?.['tab'] as string;
+          const raw = params?.['tab'];
+          if (typeof raw !== 'string') {
+            return { success: false, message: 'Tab must be a string.' };
+          }
           const validTabs: ProfileTab[] = ['identity', 'preferences', 'activity'];
-          if (!validTabs.includes(tab as ProfileTab)) {
+          const tab = validTabs.find((t) => t === raw);
+          if (!tab) {
             return { success: false, message: 'Invalid tab value.' };
           }
-          this.activeTab.set(tab as ProfileTab);
+          this.activeTab.set(tab);
           return { success: true, message: `Switched to ${tab} tab.` };
         },
       } satisfies AgentAction,

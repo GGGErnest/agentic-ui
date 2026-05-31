@@ -308,6 +308,12 @@ export class DataTableComponent {
       description: 'Get a summary of the current data (column names, row count, selected rows).',
       execute: () => this.doGetSnapshot(),
     },
+    {
+      name: 'editRow',
+      description: 'Open the edit form for a row by its ID.',
+      parameters: [{ name: 'id', type: 'string', description: 'Row ID to edit', required: true }],
+      execute: (params) => this.doEditRow(params as unknown as { id: string }),
+    },
   ];
 
   // ---- UI helpers ----
@@ -492,5 +498,14 @@ export class DataTableComponent {
         sortDirection: this.sortDirection(),
       },
     };
+  }
+
+  private async doEditRow(params: { id: string }): Promise<AgentActionResult> {
+    const row = this.data().find((r) => String(r[this.idField()]) === String(params.id));
+    if (!row) {
+      return { success: false, message: `Row with ID "${params.id}" not found.` };
+    }
+    this.rowEdit.emit(row);
+    return { success: true, message: `Opened edit form for row "${params.id}".`, data: { row } };
   }
 }

@@ -233,4 +233,28 @@ describe('DataTableComponent', () => {
     editBtn.click();
     expect(emitSpy).toHaveBeenCalledWith({ id: '1', name: 'Alice' });
   });
+
+  it('editRow action: emits rowEdit for a valid id', async () => {
+    createService();
+    const fixture = TestBed.createComponent(DataTableComponent);
+    const comp = fixture.componentInstance;
+    fixture.componentRef.setInput('agenticId', 'tbl');
+    fixture.componentRef.setInput('columns', ['name']);
+    fixture.componentRef.setInput('data', [{ id: '1', name: 'Alice' }, { id: '2', name: 'Bob' }]);
+    fixture.componentRef.setInput('idField', 'id');
+    fixture.componentRef.setInput('showEditButton', true);
+    fixture.detectChanges();
+
+    const emitSpy = vi.spyOn(comp.rowEdit, 'emit');
+    const result = await getAction(comp, 'editRow').execute({ id: '2' });
+    expect(result.success).toBe(true);
+    expect(emitSpy).toHaveBeenCalledWith({ id: '2', name: 'Bob' });
+  });
+
+  it('editRow action: returns failure for unknown id', async () => {
+    const { comp } = createComponent();
+    const result = await getAction(comp, 'editRow').execute({ id: '999' });
+    expect(result.success).toBe(false);
+    expect(result.message).toContain('not found');
+  });
 });

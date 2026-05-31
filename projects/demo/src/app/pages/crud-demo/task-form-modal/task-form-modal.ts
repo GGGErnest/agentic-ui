@@ -6,6 +6,7 @@ export interface TaskFormValue {
   title: string;
   priority: 'low' | 'medium' | 'high';
   assignee: string;
+  status: 'todo' | 'in-progress' | 'done';
 }
 
 @Component({
@@ -93,12 +94,14 @@ export class TaskFormModalComponent implements AgenticComponent {
   readonly initialTitle = input('');
   readonly initialPriority = input<'low' | 'medium' | 'high'>('medium');
   readonly initialAssignee = input('');
+  readonly initialStatus = input<'todo' | 'in-progress' | 'done'>('todo');
   readonly saved = output<TaskFormValue>();
   readonly cancelled = output<void>();
 
   readonly formTitle = linkedSignal(() => this.initialTitle());
   readonly formPriority = linkedSignal(() => this.initialPriority());
   readonly formAssignee = linkedSignal(() => this.initialAssignee());
+  readonly formStatus = linkedSignal(() => this.initialStatus());
 
   readonly modalActions: AgentAction[] = [
     {
@@ -114,11 +117,19 @@ export class TaskFormModalComponent implements AgenticComponent {
           required: false,
         },
         { name: 'assignee', type: 'string', description: 'Task assignee', required: false },
+        {
+          name: 'status',
+          type: 'string',
+          description: 'Task status',
+          enum: ['todo', 'in-progress', 'done'],
+          required: false,
+        },
       ],
       execute: async (params) => {
         if (params?.['title']) this.formTitle.set(params['title'] as string);
         if (params?.['priority']) this.formPriority.set(params['priority'] as 'low' | 'medium' | 'high');
         if (params?.['assignee']) this.formAssignee.set(params['assignee'] as string);
+        if (params?.['status']) this.formStatus.set(params['status'] as 'todo' | 'in-progress' | 'done');
         return { success: true, message: 'Form filled successfully.' };
       },
     } satisfies AgentAction,
@@ -165,6 +176,7 @@ export class TaskFormModalComponent implements AgenticComponent {
       title: this.formTitle(),
       priority: this.formPriority(),
       assignee: this.formAssignee(),
+      status: this.formStatus(),
     });
     return true;
   }

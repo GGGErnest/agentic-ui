@@ -11,6 +11,12 @@
     </select>
     <label>Assignee</label>
     <input type="text" [ngModel]="formAssignee()" (ngModelChange)="formAssignee.set($event)" />
+    <label>Status</label>
+    <select [ngModel]="formStatus()" (ngModelChange)="formStatus.set($event)">
+      <option value="todo">Todo</option>
+      <option value="in-progress">In Progress</option>
+      <option value="done">Done</option>
+    </select>
     <div class="modal-actions">
       <button type="button" class="btn btn-secondary" (click)="cancelled.emit()">Cancel</button>
       <button

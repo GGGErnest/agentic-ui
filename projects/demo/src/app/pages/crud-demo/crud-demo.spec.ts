@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AgentWorldService } from 'agentic-ui';
+import { ActivityService } from '../../services/activity.service';
 
 import { CrudDemo } from './crud-demo';
 
@@ -182,5 +183,27 @@ describe('CrudDemo', () => {
     const updated = component.tasks().find((t) => t.id === '3');
     expect(updated?.title).toBe('Update docs v2');
     expect(updated?.status).toBe('in-progress');
+  });
+
+  it('logs a task_created event when a task is added via onFormSaved', () => {
+    const activity = TestBed.inject(ActivityService);
+    component.editId.set(null); // add mode
+    component.onFormSaved({ title: 'New Task', priority: 'low', assignee: 'Bob', status: 'todo' });
+    expect(activity.events()[0].type).toBe('task_created');
+    expect(activity.events()[0].description).toContain('New Task');
+  });
+
+  it('logs a task_edited event when a task is updated via onFormSaved', () => {
+    const activity = TestBed.inject(ActivityService);
+    component.editId.set('1');
+    component.onFormSaved({ title: 'Fix login bug v2', priority: 'high', assignee: 'Alice', status: 'done' });
+    expect(activity.events()[0].type).toBe('task_edited');
+    expect(activity.events()[0].description).toContain('Fix login bug v2');
+  });
+
+  it('logs a task_deleted event when rows are deleted', () => {
+    const activity = TestBed.inject(ActivityService);
+    component.onRowsDeleted(['1', '2']);
+    expect(activity.events()[0].type).toBe('task_deleted');
   });
 });

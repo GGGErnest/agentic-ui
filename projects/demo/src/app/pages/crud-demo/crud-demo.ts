@@ -9,6 +9,7 @@ import {
   DataRow,
 } from 'agentic-ui';
 
+import { ActivityService } from '../../services/activity.service';
 import { TaskToolbarComponent } from './task-toolbar/task-toolbar';
 import { TaskFilterChipsComponent } from './task-filter-chips/task-filter-chips';
 import { TaskFormModalComponent, TaskFormValue } from './task-form-modal/task-form-modal';
@@ -48,6 +49,7 @@ interface PendingMatchRequest {
 export class CrudDemo {
   // ---- Injections ----
   private readonly world = inject(AgentWorldService);
+  private readonly activity = inject(ActivityService);
 
   @ViewChild(DataTableComponent) taskTable?: DataTableComponent;
 
@@ -186,6 +188,7 @@ export class CrudDemo {
             : t,
         ),
       );
+      this.activity.log({ type: 'task_edited', description: `Edited task "${value.title}"` });
     } else {
       const newTask: Task = {
         id: crypto.randomUUID().slice(0, 8),
@@ -195,6 +198,7 @@ export class CrudDemo {
         assignee: value.assignee || 'Unassigned',
       };
       this.tasks.update((list) => [...list, newTask]);
+      this.activity.log({ type: 'task_created', description: `Created task "${value.title}"` });
     }
     this.closeModal();
   }
@@ -206,6 +210,11 @@ export class CrudDemo {
   onRowsDeleted(deletedIds: string[]): void {
     const deletedSet = new Set(deletedIds);
     this.tasks.update((list) => list.filter((task) => !deletedSet.has(task.id)));
+    this.activity.log({
+      type: 'task_deleted',
+      description: `Deleted ${deletedIds.length} task(s)`,
+      metadata: { ids: deletedIds },
+    });
   }
 
   togglePendingChoice(id: string): void {

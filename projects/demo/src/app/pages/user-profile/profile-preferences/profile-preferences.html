@@ -1,0 +1,57 @@
+<div class="preferences-card">
+  <h2 class="section-heading">Preferences</h2>
+
+  <div class="pref-row">
+    <div>
+      <div class="pref-label">Email Notifications</div>
+      <div class="pref-description">Receive task updates via email</div>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" [checked]="prefs().emailNotifications" (change)="onEmailNotificationsChange($event.target.checked)" />
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="pref-row">
+    <div>
+      <div class="pref-label">Push Notifications</div>
+      <div class="pref-description">Browser push alerts for mentions</div>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" [checked]="prefs().pushNotifications" (change)="onPushNotificationsChange($event.target.checked)" />
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="pref-row">
+    <div>
+      <div class="pref-label">Compact View</div>
+      <div class="pref-description">Reduce spacing in task lists</div>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" [checked]="prefs().compactView" (change)="onCompactViewChange($event.target.checked)" />
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <div class="pref-row">
+    <div>
+      <div class="pref-label">Theme</div>
+    </div>
+    <select (change)="onThemeChange($any($event).target.value)">
+      <option [selected]="prefs().theme === 'dark'" value="dark">Dark</option>
+      <option [selected]="prefs().theme === 'light'" value="light">Light</option>
+    </select>
+  </div>
+
+  <div class="pref-row">
+    <div>
+      <div class="pref-label">Language</div>
+    </div>
+    <select (change)="onLanguageChange($any($event).target.value)">
+      <option [selected]="prefs().language === 'en'" value="en">English</option>
+      <option [selected]="prefs().language === 'es'" value="es">Spanish</option>
+      <option [selected]="prefs().language === 'fr'" value="fr">French</option>
+    </select>
+  </div>
+</div>

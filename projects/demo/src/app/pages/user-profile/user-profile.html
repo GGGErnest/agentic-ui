@@ -1,0 +1,21 @@
+<div class="profile-tabs">
+  <button class="tab-btn" [class.active]="activeTab() === 'identity'" (click)="activeTab.set('identity')">
+    Identity
+  </button>
+  <button class="tab-btn" [class.active]="activeTab() === 'preferences'" (click)="activeTab.set('preferences')">
+    Preferences
+  </button>
+  <button class="tab-btn" [class.active]="activeTab() === 'activity'" (click)="activeTab.set('activity')">
+    Activity
+  </button>
+</div>
+
+@if (activeTab() === 'identity') {
+  <app-profile-identity agentic />
+}
+@if (activeTab() === 'preferences') {
+  <app-profile-preferences agentic />
+}
+@if (activeTab() === 'activity') {
+  <app-profile-activity agentic />
+}

@@ -30,7 +30,7 @@
     agenticId="task-table"
     title="Tasks"
     [columns]="['title', 'priority', 'status', 'assignee']"
-    [data]="tasks()"
+    [data]="filteredTasks()"
     idField="id"
     [showEditButton]="true"
     (selectionChange)="onTableSelectionChange($event)"

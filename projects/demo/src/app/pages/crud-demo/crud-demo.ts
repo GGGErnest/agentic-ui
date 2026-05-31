@@ -80,6 +80,11 @@ export class CrudDemo {
   // ---- Selection state ----
   readonly selectedTaskIds = signal<string[]>([]);
   readonly selectedCount = computed(() => this.selectedTaskIds().length);
+  readonly filteredTasks = computed(() => {
+    const filter = this.activeFilter();
+    if (!filter) return this.tasks();
+    return this.tasks().filter((t) => t.priority === filter);
+  });
   readonly pendingMatchRequest = signal<PendingMatchRequest | null>(null);
   readonly pendingChoiceIds = signal<Set<string>>(new Set());
 

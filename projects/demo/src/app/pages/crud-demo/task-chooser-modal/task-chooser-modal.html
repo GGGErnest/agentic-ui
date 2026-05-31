@@ -4,9 +4,10 @@
   agenticId="task-chooser-modal"
   role="Delete Chooser Modal"
   [actions]="chooserActions"
+  [agenticElement]="chooserCard"
   (click)="cancelled.emit()"
 >
-  <div class="modal match-chooser" (click)="$event.stopPropagation()">
+  <div class="modal match-chooser" #chooserCard (click)="$event.stopPropagation()">
     <h2>Choose rows to delete</h2>
     <div class="demo-subtitle">{{ matches().length }} rows matched. Select the ones you want to delete.</div>
     <div class="match-chooser__list">

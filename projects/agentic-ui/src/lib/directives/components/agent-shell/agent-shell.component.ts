@@ -505,6 +505,9 @@ export class AgentShellComponent implements OnInit, OnDestroy {
 
   toggleExpand(): void {
     this.isExpanded.update(v => !v);
+    if (!this.isExpanded()) {
+      this.world.blur();
+    }
   }
 
   reset(): void {

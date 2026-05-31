@@ -31,6 +31,13 @@ describe('App', () => {
     expect(compiled.querySelector('router-outlet')).toBeTruthy();
     expect(compiled.querySelector('agui-agent-shell')).toBeTruthy();
   });
+
+  it('should render app-nav', async () => {
+    const fixture = TestBed.createComponent(App);
+    await fixture.whenStable();
+    const compiled = fixture.nativeElement as HTMLElement;
+    expect(compiled.querySelector('app-nav')).toBeTruthy();
+  });
 });
 
 /**

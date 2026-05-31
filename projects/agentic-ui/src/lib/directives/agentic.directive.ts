@@ -35,6 +35,8 @@ export class AgenticDirective implements OnDestroy {
 
   readonly agenticId = input<string | undefined>(undefined);
 
+  readonly agenticElement = input<HTMLElement | undefined>(undefined);
+
   readonly role = input('UI Component');
 
   readonly actions = input<AgentAction[]>([]);
@@ -58,13 +60,14 @@ export class AgenticDirective implements OnDestroy {
       const actions = host ? host.agenticActions : this.actions();
       const metadata = host ? (host.agenticMetadata ?? {}) : this.metadata();
 
+      const elementToRegister = this.agenticElement() ?? this.el.nativeElement;
       this.el.nativeElement.setAttribute('data-agentic-id', id);
 
       if (this.registeredId && this.registeredId !== id) {
         this.world.unregister(this.registeredId);
       }
 
-      this.world.register({ id, role, actions, element: this.el.nativeElement, metadata });
+      this.world.register({ id, role, actions, element: elementToRegister, metadata });
 
       this.registeredId = id;
     });

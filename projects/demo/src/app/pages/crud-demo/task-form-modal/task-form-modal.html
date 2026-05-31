@@ -1,5 +1,5 @@
-<div class="modal-backdrop" agentic (click)="cancelled.emit()" role="modal">
-  <div class="modal" (click)="$event.stopPropagation()">
+<div class="modal-backdrop" agentic [agenticElement]="modalCard" (click)="cancelled.emit()" role="modal">
+  <div class="modal" #modalCard (click)="$event.stopPropagation()">
     <h2>{{ editId() ? '✏️ Edit Task' : '➕ New Task' }}</h2>
     <label>Title</label>
     <input type="text" [ngModel]="formTitle()" (ngModelChange)="formTitle.set($event)" />

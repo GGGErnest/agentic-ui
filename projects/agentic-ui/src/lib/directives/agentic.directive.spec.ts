@@ -42,6 +42,18 @@ class TestNoIdComponent {
   acts: AgentAction[] = [makeAction('click')];
 }
 
+@Component({
+  selector: 'test-agentic-element',
+  standalone: true,
+  imports: [AgenticDirective],
+  template: `
+    <div agentic agenticId="override-element" [agenticElement]="innerRef">
+      <div #innerRef class="inner-target">inner</div>
+    </div>
+  `,
+})
+class TestAgenticElementComponent {}
+
 describe('AgenticDirective', () => {
   let world: AgentWorldService;
 
@@ -98,5 +110,14 @@ describe('AgenticDirective', () => {
     fixture.detectChanges();
     expect(world.entries().has('override-id')).toBe(true);
     expect(world.entries().has('token-id')).toBe(false);
+  });
+
+  it('uses agenticElement when provided', () => {
+    const fixture = TestBed.createComponent(TestAgenticElementComponent);
+    fixture.detectChanges();
+    const entry = world.entries().get('override-element');
+    expect(entry).toBeDefined();
+    const innerEl = (fixture.nativeElement as HTMLElement).querySelector('.inner-target');
+    expect(entry!.element).toBe(innerEl);
   });
 });

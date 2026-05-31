@@ -4,6 +4,7 @@ import {
   EventEmitter,
   input,
   Output,
+  output,
   signal,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
@@ -51,6 +52,9 @@ import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.mod
                 }
               </th>
             }
+            @if (showEditButton()) {
+              <th class="data-table__actions-col">Actions</th>
+            }
             <th class="data-table__select-col">#</th>
           </tr>
         </thead>
@@ -59,6 +63,11 @@ import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.mod
             <tr [class.selected]="isSelected(row[idField()])">
               @for (col of columns(); track col) {
                 <td>{{ row[col] }}</td>
+              }
+              @if (showEditButton()) {
+                <td>
+                  <button class="row-edit-btn" type="button" (click)="rowEdit.emit(row)">Edit</button>
+                </td>
               }
               <td>
                 <input
@@ -133,6 +142,21 @@ import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.mod
       .data-table__select-col {
         width: 40px;
       }
+      .data-table__actions-col {
+        width: 80px;
+      }
+      .row-edit-btn {
+        padding: 3px 10px;
+        background: #161b22;
+        border: 1px solid #30363d;
+        border-radius: 4px;
+        color: #58a6ff;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .row-edit-btn:hover {
+        background: #1c2530;
+      }
       .data-table__empty {
         padding: 24px;
         text-align: center;
@@ -165,11 +189,13 @@ export class DataTableComponent {
   readonly columns = input.required<string[]>();
   readonly data = input.required<DataRow[]>();
   readonly idField = input('id');
+  readonly showEditButton = input(false);
 
   // ---- Outputs ----
 
   @Output() readonly selectionChange = new EventEmitter<string[]>();
   @Output() readonly rowsDeleted = new EventEmitter<string[]>();
+  readonly rowEdit = output<DataRow>();
 
   // ---- State ----
 

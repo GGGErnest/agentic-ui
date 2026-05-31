@@ -194,4 +194,43 @@ describe('DataTableComponent', () => {
 
     expect([...comp.selectedIds()]).toEqual([]);
   });
+
+  it('renders an Actions column when showEditButton is true', () => {
+    createService();
+    const fixture = TestBed.createComponent(DataTableComponent);
+    fixture.componentRef.setInput('agenticId', 'tbl');
+    fixture.componentRef.setInput('columns', ['name']);
+    fixture.componentRef.setInput('data', [{ id: '1', name: 'Alice' }]);
+    fixture.componentRef.setInput('idField', 'id');
+    fixture.componentRef.setInput('showEditButton', true);
+    fixture.detectChanges();
+
+    const headers = fixture.nativeElement.querySelectorAll('th');
+    const headerTexts = Array.from(headers).map((h: any) => h.textContent.trim());
+    expect(headerTexts).toContain('Actions');
+  });
+
+  it('does NOT render an Actions column when showEditButton is false (default)', () => {
+    const { fixture } = createComponent();
+    const headers = fixture.nativeElement.querySelectorAll('th');
+    const headerTexts = Array.from(headers).map((h: any) => h.textContent.trim());
+    expect(headerTexts).not.toContain('Actions');
+  });
+
+  it('emits rowEdit with the row data when Edit button is clicked', () => {
+    createService();
+    const fixture = TestBed.createComponent(DataTableComponent);
+    const comp = fixture.componentInstance;
+    fixture.componentRef.setInput('agenticId', 'tbl');
+    fixture.componentRef.setInput('columns', ['name']);
+    fixture.componentRef.setInput('data', [{ id: '1', name: 'Alice' }]);
+    fixture.componentRef.setInput('idField', 'id');
+    fixture.componentRef.setInput('showEditButton', true);
+    fixture.detectChanges();
+
+    const emitSpy = vi.spyOn(comp.rowEdit, 'emit');
+    const editBtn: HTMLButtonElement = fixture.nativeElement.querySelector('.row-edit-btn');
+    editBtn.click();
+    expect(emitSpy).toHaveBeenCalledWith({ id: '1', name: 'Alice' });
+  });
 });

@@ -59,6 +59,10 @@ export class UserProfile implements AgenticComponent {
 
   readonly activeTab = signal<ProfileTab>('identity');
 
+  switchTab(tab: ProfileTab): void {
+    this.activeTab.set(tab);
+  }
+
   get agenticActions(): AgentAction[] {
     return [
       {
@@ -83,7 +87,7 @@ export class UserProfile implements AgenticComponent {
           if (!tab) {
             return { success: false, message: 'Invalid tab value.' };
           }
-          this.activeTab.set(tab);
+          this.switchTab(tab);
           return { success: true, message: `Switched to ${tab} tab.` };
         },
       } satisfies AgentAction,

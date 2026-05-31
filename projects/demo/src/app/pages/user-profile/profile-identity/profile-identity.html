@@ -1,0 +1,63 @@
+<div class="identity-card">
+  @if (!isEditing()) {
+    <div class="identity-header">
+      <div class="avatar">{{ initials }}</div>
+      <div>
+        <div class="identity-name">{{ profile().name }}</div>
+        <div class="identity-role">{{ profile().role }} • {{ profile().department }}</div>
+      </div>
+    </div>
+
+    <div class="field-row">
+      <label class="field-label">Email</label>
+      <div class="field-value">{{ profile().email }}</div>
+    </div>
+
+    <div class="field-row">
+      <label class="field-label">Bio</label>
+      <div class="field-value">{{ profile().bio }}</div>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn btn-primary" (click)="agenticActions[1].execute({})">
+        Edit Profile
+      </button>
+    </div>
+  } @else {
+    <h2 style="margin: 0 0 16px; font-size: 18px; color: #e6edf3">✏️ Edit Profile</h2>
+
+    <div class="field-row">
+      <label class="field-label">Name</label>
+      <input type="text" [(ngModel)]="editName" />
+    </div>
+
+    <div class="field-row">
+      <label class="field-label">Email</label>
+      <input type="email" [(ngModel)]="editEmail" />
+    </div>
+
+    <div class="field-row">
+      <label class="field-label">Bio</label>
+      <textarea [(ngModel)]="editBio"></textarea>
+    </div>
+
+    <div class="field-row">
+      <label class="field-label">Role</label>
+      <input type="text" [(ngModel)]="editRole" />
+    </div>
+
+    <div class="field-row">
+      <label class="field-label">Department</label>
+      <input type="text" [(ngModel)]="editDepartment" />
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn btn-secondary" (click)="agenticActions[4].execute({})">
+        Cancel
+      </button>
+      <button type="button" class="btn btn-primary" (click)="agenticActions[3].execute({})">
+        Save Changes
+      </button>
+    </div>
+  }
+</div>

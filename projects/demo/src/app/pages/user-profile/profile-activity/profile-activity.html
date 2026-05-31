@@ -1,0 +1,19 @@
+<div class="activity-card">
+  <h2 class="activity-heading">Recent Activity</h2>
+
+  @if (events().length === 0) {
+    <p class="activity-empty">No activity yet.</p>
+  } @else {
+    <ul class="activity-list">
+      @for (event of events(); track event.id) {
+        <li class="activity-item">
+          <div class="activity-dot"></div>
+          <div class="activity-content">
+            <p class="activity-description">{{ event.description }}</p>
+            <p class="activity-time">{{ formatTime(event.timestamp) }}</p>
+          </div>
+        </li>
+      }
+    </ul>
+  }
+</div>

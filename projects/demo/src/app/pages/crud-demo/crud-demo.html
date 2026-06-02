@@ -34,6 +34,7 @@
     idField="id"
     [showEditButton]="true"
     (selectionChange)="onTableSelectionChange($event)"
+    (bulkEdited)="onRowsEdited($event)"
     (rowsDeleted)="onRowsDeleted($event)"
     (rowEdit)="openEditModal($event)"
   />

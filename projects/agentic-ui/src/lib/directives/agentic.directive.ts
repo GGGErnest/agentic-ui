@@ -49,12 +49,9 @@ export class AgenticDirective implements OnDestroy {
     effect(() => {
       const inputId = this.agenticId();
       const host = this.host;
+      const hostId = typeof host?.agenticId === 'function' ? host.agenticId() : host?.agenticId;
 
-      const id =
-        inputId ??
-        host?.agenticId ??
-        (this.el.nativeElement.id || undefined) ??
-        this.fallbackId;
+      const id = inputId ?? hostId ?? (this.el.nativeElement.id || undefined) ?? this.fallbackId;
 
       const role = host ? (host.agenticRole ?? 'UI Component') : this.role();
       const actions = host ? host.agenticActions : this.actions();

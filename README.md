@@ -2,7 +2,7 @@
 
 **Framework for building AI agent-instrumentable Angular SPAs.**
 
-Instead of the agent scraping the DOM and clicking CSS selectors, components *register their capabilities* through a World Registry. The agent calls semantic tools like `data-table-1__findRow` rather than `document.querySelector('.row:nth-child(5)')`. This architecture survives UI refactors, minification, and framework changes.
+Instead of the agent scraping the DOM and clicking CSS selectors, components _register their capabilities_ through a World Registry. The agent calls semantic tools like `data-table-1__findRow` rather than `document.querySelector('.row:nth-child(5)')`. This architecture survives UI refactors, minification, and framework changes.
 
 ## Architecture
 
@@ -59,15 +59,18 @@ npm install agentic-ui
 
 ```typescript
 // app.config.ts
-import { provideOpenAi } from 'agentic-ui';
+import { LLM_PROVIDER, provideOpenAi } from 'agentic-ui';
 
 export const appConfig: ApplicationConfig = {
   providers: [
-    provideOpenAi({
-      apiKey: 'sk-...',
-      model: 'gpt-4o',       // default
-      temperature: 0.1,      // low = reliable tool use
-    }),
+    {
+      provide: LLM_PROVIDER,
+      useValue: provideOpenAi({
+        apiKey: 'sk-...',
+        model: 'gpt-4o', // default
+        temperature: 0.1, // low = reliable tool use
+      }),
+    },
   ],
 };
 ```
@@ -79,11 +82,7 @@ export const appConfig: ApplicationConfig = {
 <agui-agent-shell />
 
 <!-- Your content — components register automatically -->
-<agui-data-table 
-  agenticId="users-table" 
-  [columns]="['name', 'email', 'role']"
-  [data]="users"
-/>
+<agui-data-table agenticId="users-table" [columns]="['name', 'email', 'role']" [data]="users" />
 ```
 
 ### Instrument any component with [agentic]
@@ -113,7 +112,7 @@ Every component with `[agentic]` registers its ID, role, and actions in a Signal
 
 ### Contextual Scoping (IntersectionObserver)
 
-Only **visible** components are reported to the LLM. When you scroll a component out of the viewport, its tools disappear from the agent's context. This prevents token bloat on large pages.
+The snapshot context lists registered components and marks whether they are visible. Tool definitions are generated only for visible, unoccluded components. When you scroll a component out of the viewport, its tools disappear from the agent's callable context.
 
 ### Snapshot Budget Control
 
@@ -122,9 +121,9 @@ Control LLM token usage with budget configs:
 ```typescript
 // In AgentWorldService
 const snap = world.snapshot({
-  maxTools: 10,                          // cap tool definitions
-  maxContextLen: 1000,                   // cap context string
-  priorityRoles: ['DataTable', 'Modal'],  // these appear first
+  maxTools: 10, // cap tool definitions
+  maxContextLen: 1000, // cap context string
+  priorityRoles: ['DataTable', 'Modal'], // these appear first
 });
 ```
 
@@ -133,7 +132,7 @@ const snap = world.snapshot({
 Instead of instrumenting every cell/row/button, expose a **high-level API** that turns the agent from a "DOM clicker" into a "power user":
 
 ```typescript
-// DataTable exposes: findRow, bulkEdit, bulkDelete, sortBy, filterBy
+// DataTable exposes: findRow, bulkEdit, bulkDelete, sortBy, filterBy, clearFilter
 // Agent calls: data-table-1__bulkEdit({ ids: ['1','2'], changes: { status: 'done' } })
 ```
 
@@ -152,12 +151,14 @@ The harness runs a Reason + Act cycle:
 Actions marked `requiresApproval: true` pause the harness and show a dialog:
 
 ```typescript
-actions: [{
-  name: 'bulkDelete',
-  description: 'Delete multiple rows',
-  requiresApproval: true,    // ← user must approve first
-  execute: (params) => this.doBulkDelete(params),
-}]
+actions: [
+  {
+    name: 'bulkDelete',
+    description: 'Delete multiple rows',
+    requiresApproval: true, // ← user must approve first
+    execute: (params) => this.doBulkDelete(params),
+  },
+];
 ```
 
 The harness blocks until user clicks Approve or Reject. Shadow mode bypasses approval (for testing).
@@ -167,25 +168,25 @@ The harness blocks until user clicks Approve or Reject. Shadow mode bypasses app
 Toggle shadow mode to simulate agent actions without executing them:
 
 ```typescript
-world.shadowMode.set(true);   // All actions return [SHADOW] simulation
-world.shadowMode.set(false);  // Back to live execution
+world.shadowMode.set(true); // All actions return [SHADOW] simulation
+world.shadowMode.set(false); // Back to live execution
 ```
 
 ## API Reference
 
 ### Exports
 
-| Export | Type | Description |
-|---|---|---|
-| `AgentWorldService` | Service | World Registry — register, execute, snapshot |
-| `AgentHarness` | Service | ReAct loop — run cycles, manage conversation |
-| `AgentApprovalService` | Service | Human-in-the-loop gate for destructive actions |
-| `AgenticDirective` | Directive | `[agentic]` — bridge components to registry |
-| `DataTableComponent` | Component | Facade reference implementation |
-| `AgentShellComponent` | Component | Floating chat UI + telemetry + approval dialog |
-| `AgentApprovalDialogComponent` | Component | Modal approve/reject for destructive actions |
-| `OpenAiProvider` | Class | OpenAI-compatible LLM provider |
-| `LLM_PROVIDER` | Token | DI token for LLM provider injection |
+| Export                         | Type      | Description                                    |
+| ------------------------------ | --------- | ---------------------------------------------- |
+| `AgentWorldService`            | Service   | World Registry — register, execute, snapshot   |
+| `AgentHarness`                 | Service   | ReAct loop — run cycles, manage conversation   |
+| `AgentApprovalService`         | Service   | Human-in-the-loop gate for destructive actions |
+| `AgenticDirective`             | Directive | `[agentic]` — bridge components to registry    |
+| `DataTableComponent`           | Component | Facade reference implementation                |
+| `AgentShellComponent`          | Component | Floating chat UI + telemetry + approval dialog |
+| `AgentApprovalDialogComponent` | Component | Modal approve/reject for destructive actions   |
+| `OpenAiProvider`               | Class     | OpenAI-compatible LLM provider                 |
+| `LLM_PROVIDER`                 | Token     | DI token for LLM provider injection            |
 
 ### Types
 
@@ -212,9 +213,9 @@ harness.importConversation(saved);
 
 ```typescript
 await harness.runCycle('Delete row 42', {
-  timeoutMs: 30_000,     // abort after 30s (default: 60s)
-  maxSteps: 5,           // max tool calls per cycle (default: 10)
-  signal: abort.signal,  // external AbortSignal
+  timeoutMs: 30_000, // abort after 30s (default: 60s)
+  maxSteps: 5, // max tool calls per cycle (default: 10)
+  signal: abort.signal, // external AbortSignal
 });
 ```
 

@@ -8,6 +8,7 @@ import {
   ElementRef,
   OnInit,
   OnDestroy,
+  ChangeDetectionStrategy,
 } from '@angular/core';
 
 declare global {
@@ -16,9 +17,10 @@ declare global {
   }
 }
 import { CommonModule } from '@angular/common';
-import { AgentHarness, AgentStep, ChatTurn } from '../../../core/harness/agent-harness.service';
+import { AgentHarness } from '../../../core/harness/agent-harness.service';
 import { AgentWorldService } from '../../../core/world/agent-world.service';
 import { AgentApprovalDialogComponent } from '../../../components/approval-dialog/agent-approval-dialog.component';
+import { TelemetryOverlayComponent } from '../telemetry-overlay/telemetry-overlay.component';
 
 /**
  * AgentShellComponent — the floating UI window for agent interaction.
@@ -34,9 +36,11 @@ import { AgentApprovalDialogComponent } from '../../../components/approval-dialo
 @Component({
   selector: 'agui-agent-shell',
   standalone: true,
-  imports: [CommonModule, AgentApprovalDialogComponent],
+  imports: [CommonModule, AgentApprovalDialogComponent, TelemetryOverlayComponent],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   template: `
     <agui-approval-dialog />
+    <agui-telemetry-overlay />
 
     <div class="agent-shell" [class.expanded]="isExpanded()">
       @if (!isExpanded()) {
@@ -54,9 +58,23 @@ import { AgentApprovalDialogComponent } from '../../../components/approval-dialo
               <span class="agent-shell__badge" [class.shadow]="shadowActive()">
                 {{ shadowActive() ? '🛡️ Shadow' : '⚡ Live' }}
               </span>
-              <button class="agent-shell__btn-icon" (click)="toggleShadowMode()" title="Toggle shadow mode">🛡️</button>
-              <button class="agent-shell__btn-icon" (click)="reset()" title="Reset conversation history">↺</button>
-              <button class="agent-shell__btn-icon" (click)="toggleExpand()" title="Minimize">✕</button>
+              <button
+                class="agent-shell__btn-icon"
+                (click)="toggleShadowMode()"
+                title="Toggle shadow mode"
+              >
+                🛡️
+              </button>
+              <button
+                class="agent-shell__btn-icon"
+                (click)="reset()"
+                title="Reset conversation history"
+              >
+                ↺
+              </button>
+              <button class="agent-shell__btn-icon" (click)="toggleExpand()" title="Minimize">
+                ✕
+              </button>
             </div>
           </div>
 
@@ -80,13 +98,25 @@ import { AgentApprovalDialogComponent } from '../../../components/approval-dialo
               <div class="agent-shell__user-message">{{ turn.userMessage }}</div>
 
               @for (step of turn.steps; track step.timestamp) {
-                <div class="agent-shell__step" [class.failed]="step.result && step.result.toLowerCase().includes('error')">
+                <div
+                  class="agent-shell__step"
+                  [class.failed]="step.result && step.result.toLowerCase().includes('error')"
+                >
                   <div class="agent-shell__step-header">
                     <span class="agent-shell__step-action">
                       {{ step.action ? '⚙️ ' + step.action : '🧠 General Reasoning Task' }}
                     </span>
-                    <span class="agent-shell__step-status" [class.success]="step.result && !step.result.toLowerCase().includes('error')">
-                      {{ step.result ? (step.result.includes('Error') || step.result.includes('rejected') ? '✗ Failed' : '✓ Completed') : '' }}
+                    <span
+                      class="agent-shell__step-status"
+                      [class.success]="step.result && !step.result.toLowerCase().includes('error')"
+                    >
+                      {{
+                        step.result
+                          ? step.result.includes('Error') || step.result.includes('rejected')
+                            ? '✗ Failed'
+                            : '✓ Completed'
+                          : ''
+                      }}
                     </span>
                   </div>
                   @if (step.result) {
@@ -133,14 +163,12 @@ import { AgentApprovalDialogComponent } from '../../../components/approval-dialo
               placeholder="Command the runtime agent..."
               [disabled]="harness.isRunning()"
             />
-            
+
             @if (harness.isRunning()) {
-              <button class="agent-shell__btn-interrupt" (click)="interruptAgent()">
-                🛑 Stop
-              </button>
+              <button class="agent-shell__btn-interrupt" (click)="interruptAgent()">🛑 Stop</button>
             } @else {
-              <button 
-                class="agent-shell__btn-send" 
+              <button
+                class="agent-shell__btn-send"
                 (click)="sendPrompt()"
                 [disabled]="!userInput().trim()"
               >
@@ -152,108 +180,237 @@ import { AgentApprovalDialogComponent } from '../../../components/approval-dialo
       }
     </div>
   `,
-  styles: [`
-    :host { position: fixed; bottom: 20px; right: 20px; z-index: 9999; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+  styles: [
+    `
+      :host {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        z-index: 9999;
+        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      }
 
-    .agent-shell__toggle {
-      width: 48px; height: 48px; border-radius: 50%; border: 1px solid #30363d;
-      background: #161b22; color: #e6edf3; font-size: 22px; cursor: pointer;
-      position: relative; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
-      transition: transform 150ms;
-    }
-    .agent-shell__toggle:hover { transform: scale(1.1); }
-    .pulse {
-      position: absolute; top: -2px; right: -2px; width: 10px; height: 10px;
-      border-radius: 50%; background: #58a6ff; animation: pulse 1s infinite;
-    }
-    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+      .agent-shell__toggle {
+        width: 48px;
+        height: 48px;
+        border-radius: 50%;
+        border: 1px solid #30363d;
+        background: #161b22;
+        color: #e6edf3;
+        font-size: 22px;
+        cursor: pointer;
+        position: relative;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        transition: transform 150ms;
+      }
+      .agent-shell__toggle:hover {
+        transform: scale(1.1);
+      }
+      .pulse {
+        position: absolute;
+        top: -2px;
+        right: -2px;
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #58a6ff;
+        animation: pulse 1s infinite;
+      }
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.3;
+        }
+      }
 
-    .agent-shell__panel {
-      width: 380px; max-height: 520px; background: #0d1117; border: 1px solid #30363d;
-      border-radius: 12px; box-shadow: 0 8px 32px rgba(0,0,0,0.5);
-      display: flex; flex-direction: column; overflow: hidden;
-    }
+      .agent-shell__panel {
+        width: 380px;
+        max-height: 520px;
+        background: #0d1117;
+        border: 1px solid #30363d;
+        border-radius: 12px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
 
-    .agent-shell__header {
-      display: flex; justify-content: space-between; align-items: center;
-      padding: 12px 16px; border-bottom: 1px solid #21262d;
-    }
-    .agent-shell__title { font-weight: 600; color: #e6edf3; font-size: 14px; }
-    .agent-shell__controls { display: flex; align-items: center; gap: 6px; }
-    .agent-shell__badge {
-      font-size: 11px; padding: 2px 8px; border-radius: 10px;
-      background: #21262d; color: #8b949e;
-    }
-    .agent-shell__badge.shadow { background: #3f2900; color: #d29922; }
-    .agent-shell__btn-icon {
-      background: none; border: none; color: #8b949e; cursor: pointer;
-      font-size: 15px; padding: 4px; border-radius: 4px;
-    }
-    .agent-shell__btn-icon:hover { color: #e6edf3; background: #21262d; }
+      .agent-shell__header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 12px 16px;
+        border-bottom: 1px solid #21262d;
+      }
+      .agent-shell__title {
+        font-weight: 600;
+        color: #e6edf3;
+        font-size: 14px;
+      }
+      .agent-shell__controls {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .agent-shell__badge {
+        font-size: 11px;
+        padding: 2px 8px;
+        border-radius: 10px;
+        background: #21262d;
+        color: #8b949e;
+      }
+      .agent-shell__badge.shadow {
+        background: #3f2900;
+        color: #d29922;
+      }
+      .agent-shell__btn-icon {
+        background: none;
+        border: none;
+        color: #8b949e;
+        cursor: pointer;
+        font-size: 15px;
+        padding: 4px;
+        border-radius: 4px;
+      }
+      .agent-shell__btn-icon:hover {
+        color: #e6edf3;
+        background: #21262d;
+      }
 
-    .agent-shell__thought {
-      padding: 10px 14px; background: #0d2950; border-bottom: 1px solid #21262d;
-      max-height: 160px; overflow-y: auto;
-    }
-    .agent-shell__thought-label { font-size: 11px; color: #58a6ff; margin-bottom: 4px; }
-    .agent-shell__thought-text { font-size: 13px; color: #c9d1d9; line-height: 1.5; white-space: pre-wrap; }
+      .agent-shell__thought {
+        padding: 10px 14px;
+        background: #0d2950;
+        border-bottom: 1px solid #21262d;
+        max-height: 160px;
+        overflow-y: auto;
+      }
+      .agent-shell__thought-label {
+        font-size: 11px;
+        color: #58a6ff;
+        margin-bottom: 4px;
+      }
+      .agent-shell__thought-text {
+        font-size: 13px;
+        color: #c9d1d9;
+        line-height: 1.5;
+        white-space: pre-wrap;
+      }
 
-    .agent-shell__steps { flex: 1; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; }
-    .agent-shell__steps-label { font-size: 11px; color: #8b949e; padding: 4px 8px 8px; }
-    .agent-shell__user-message {
-      align-self: flex-end;
-      background: #1f6feb;
-      color: #e6edf3;
-      border-radius: 12px 12px 2px 12px;
-      padding: 8px 12px;
-      font-size: 13px;
-      max-width: 85%;
-      margin-bottom: 8px;
-      word-break: break-word;
-    }
-    .agent-shell__turn-loading {
-      display: flex;
-      align-items: center;
-      padding: 8px 4px;
-    }
-    .agent-shell__step {
-      background: #161b22; border: 1px solid #21262d; border-radius: 8px;
-      padding: 8px 12px; margin-bottom: 8px;
-    }
-    .agent-shell__step.failed { border-color: #da3633; }
-    .agent-shell__step-header {
-      display: flex; justify-content: space-between; align-items: center;
-    }
-    .agent-shell__step-action {
-      font-size: 13px; font-weight: 600; color: #e6edf3;
-      font-family: 'SF Mono', 'Fira Code', monospace;
-    }
-    .agent-shell__step-status { font-size: 14px; }
-    .agent-shell__step-status.success { color: #3fb950; }
-    .agent-shell__step.failed .agent-shell__step-status { color: #da3633; }
-    .agent-shell__step-thought {
-      font-size: 12px; color: #8b949e; margin-top: 4px; font-style: italic;
-    }
-    .agent-shell__step-result {
-      font-size: 12px; color: #c9d1d9; margin-top: 6px;
-      padding: 6px 8px; background: #0d1117; border-radius: 4px;
-    }
+      .agent-shell__steps {
+        flex: 1;
+        overflow-y: auto;
+        padding: 8px;
+        display: flex;
+        flex-direction: column;
+      }
+      .agent-shell__steps-label {
+        font-size: 11px;
+        color: #8b949e;
+        padding: 4px 8px 8px;
+      }
+      .agent-shell__user-message {
+        align-self: flex-end;
+        background: #1f6feb;
+        color: #e6edf3;
+        border-radius: 12px 12px 2px 12px;
+        padding: 8px 12px;
+        font-size: 13px;
+        max-width: 85%;
+        margin-bottom: 8px;
+        word-break: break-word;
+      }
+      .agent-shell__turn-loading {
+        display: flex;
+        align-items: center;
+        padding: 8px 4px;
+      }
+      .agent-shell__step {
+        background: #161b22;
+        border: 1px solid #21262d;
+        border-radius: 8px;
+        padding: 8px 12px;
+        margin-bottom: 8px;
+      }
+      .agent-shell__step.failed {
+        border-color: #da3633;
+      }
+      .agent-shell__step-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .agent-shell__step-action {
+        font-size: 13px;
+        font-weight: 600;
+        color: #e6edf3;
+        font-family: 'SF Mono', 'Fira Code', monospace;
+      }
+      .agent-shell__step-status {
+        font-size: 14px;
+      }
+      .agent-shell__step-status.success {
+        color: #3fb950;
+      }
+      .agent-shell__step.failed .agent-shell__step-status {
+        color: #da3633;
+      }
+      .agent-shell__step-thought {
+        font-size: 12px;
+        color: #8b949e;
+        margin-top: 4px;
+        font-style: italic;
+      }
+      .agent-shell__step-result {
+        font-size: 12px;
+        color: #c9d1d9;
+        margin-top: 6px;
+        padding: 6px 8px;
+        background: #0d1117;
+        border-radius: 4px;
+      }
 
-    .agent-shell__input {
-      display: flex; padding: 10px; border-top: 1px solid #21262d; gap: 8px;
-    }
-    .agent-shell__input-field {
-      flex: 1; padding: 8px 12px; font-size: 13px; border: 1px solid #30363d;
-      border-radius: 8px; background: #161b22; color: #e6edf3; outline: none;
-    }
-    .agent-shell__input-field:focus { border-color: #58a6ff; }
-    .agent-shell__input-field:disabled { opacity: 0.5; }
-    .agent-shell__btn-send {
-      padding: 8px 16px; background: #238636; color: #fff; font-weight: 600;
-      border: none; border-radius: 8px; cursor: pointer; font-size: 13px;
-    }
-    .agent-shell__btn-send:hover { background: #2ea043; }
-    .agent-shell__btn-send:disabled { opacity: 0.5; cursor: default; }
+      .agent-shell__input {
+        display: flex;
+        padding: 10px;
+        border-top: 1px solid #21262d;
+        gap: 8px;
+      }
+      .agent-shell__input-field {
+        flex: 1;
+        padding: 8px 12px;
+        font-size: 13px;
+        border: 1px solid #30363d;
+        border-radius: 8px;
+        background: #161b22;
+        color: #e6edf3;
+        outline: none;
+      }
+      .agent-shell__input-field:focus {
+        border-color: #58a6ff;
+      }
+      .agent-shell__input-field:disabled {
+        opacity: 0.5;
+      }
+      .agent-shell__btn-send {
+        padding: 8px 16px;
+        background: #238636;
+        color: #fff;
+        font-weight: 600;
+        border: none;
+        border-radius: 8px;
+        cursor: pointer;
+        font-size: 13px;
+      }
+      .agent-shell__btn-send:hover {
+        background: #2ea043;
+      }
+      .agent-shell__btn-send:disabled {
+        opacity: 0.5;
+        cursor: default;
+      }
       .agent-shell__btn-interrupt {
         padding: 8px 16px;
         background: #da3633;
@@ -344,11 +501,20 @@ import { AgentApprovalDialogComponent } from '../../../components/approval-dialo
         animation: spin-loader 0.8s linear infinite;
       }
       @keyframes spin-loader {
-        to { transform: rotate(360deg); }
+        to {
+          transform: rotate(360deg);
+        }
       }
       @keyframes spark-blink {
-        0%, 100% { opacity: 1; transform: scale(1); }
-        50% { opacity: 0.4; transform: scale(1.2); }
+        0%,
+        100% {
+          opacity: 1;
+          transform: scale(1);
+        }
+        50% {
+          opacity: 0.4;
+          transform: scale(1.2);
+        }
       }
     `,
   ],
@@ -357,7 +523,7 @@ export class AgentShellComponent implements OnInit, OnDestroy {
   readonly harness = inject(AgentHarness);
   readonly world = inject(AgentWorldService);
 
-  @ViewChild('stepsContainer') private stepsContainer!: ElementRef<HTMLElement>;
+  @ViewChild('stepsContainer') private stepsContainer?: ElementRef<HTMLElement>;
 
   userInput = signal<string>('');
   isExpanded = signal<boolean>(false);
@@ -375,7 +541,7 @@ export class AgentShellComponent implements OnInit, OnDestroy {
     for (const [id, entry] of activeComponents) {
       if (entry.role === 'DataTable') {
         prompts.push(`Summarize the ${id} table`);
-        prompts.push(`Clear filters on ${id}`);
+        prompts.push(`Clear filter on ${id}`);
       } else if (entry.role === 'Toolbar Action') {
         prompts.push(`Add a high priority task for Alice`);
       }
@@ -400,59 +566,31 @@ export class AgentShellComponent implements OnInit, OnDestroy {
     window.Agent = {
       snapshot: () => {
         const snap = this.world.snapshot();
-        console.group('[Agent] snapshot()');
-        console.log('context:\n' + snap.context);
-        console.table(snap.tools.map((t) => ({ name: t.function.name, description: t.function.description })));
-        console.groupEnd();
         return snap;
       },
       world: () => {
-        const entries = this.world.entries();
-        console.group('[Agent] world() — all registered entries');
-        console.log(entries);
-        console.groupEnd();
-        return entries;
+        return this.world.entries();
       },
       visible: () => {
-        const active = this.world.activeEntries();
-        console.group('[Agent] visible() — viewport-visible entries');
-        console.log(active);
-        console.groupEnd();
-        return active;
+        return this.world.activeEntries();
       },
       messages: () => {
-        const msgs = this.harness.exportConversation().messages;
-        console.group('[Agent] messages() — LLM conversation history');
-        console.log(msgs);
-        console.groupEnd();
-        return msgs;
+        return this.harness.exportConversation().messages;
       },
       system: () => {
-        const prompt = this.harness.exportConversation().systemPrompt;
-        console.group('[Agent] system() — system prompt');
-        console.log(prompt);
-        console.groupEnd();
-        return prompt;
+        return this.harness.exportConversation().systemPrompt;
       },
       steps: () => {
-        const s = this.harness.steps();
-        console.group('[Agent] steps() — ReAct step history');
-        console.log(s);
-        console.groupEnd();
-        return s;
+        return this.harness.steps();
       },
       status: () => {
-        const st = {
+        return {
           isRunning: this.harness.isRunning(),
           isStable: this.world.isStable(),
           shadowMode: this.world.shadowMode(),
           focusedEntryId: this.world.focusedEntryId(),
           visibleCount: this.world.activeEntries().size,
         };
-        console.group('[Agent] status()');
-        console.table(st);
-        console.groupEnd();
-        return st;
       },
     };
   }
@@ -473,7 +611,7 @@ export class AgentShellComponent implements OnInit, OnDestroy {
 
     this.userInput.set('');
     this.isExpanded.set(true);
-    
+
     this.abortController = new AbortController();
     await this.harness.runCycle(prompt, { signal: this.abortController.signal });
   }
@@ -500,11 +638,11 @@ export class AgentShellComponent implements OnInit, OnDestroy {
   }
 
   toggleShadowMode(): void {
-    this.world.shadowMode.update(v => !v);
+    this.world.shadowMode.update((v) => !v);
   }
 
   toggleExpand(): void {
-    this.isExpanded.update(v => !v);
+    this.isExpanded.update((v) => !v);
     if (!this.isExpanded()) {
       this.world.blur();
     }

@@ -79,10 +79,14 @@ describe('DataTableComponent', () => {
     expect(r.message).toContain('1 row(s)');
   });
 
-  it('bulkEdit: edits multiple rows', async () => {
+  it('bulkEdit: emits edits without mutating input rows', async () => {
     const { comp } = createComponent();
+    const emitSpy = vi.spyOn(comp.bulkEdited, 'emit');
+
     await getAction(comp, 'bulkEdit').execute({ ids: ['1', '2'], changes: { team: 'Mobile' } });
-    expect(comp.data().find((r: any) => r['id'] === '1')!['team']).toBe('Mobile');
+
+    expect(emitSpy).toHaveBeenCalledWith({ ids: ['1', '2'], changes: { team: 'Mobile' } });
+    expect(comp.data().find((r: any) => r['id'] === '1')!['team']).toBe('Frontend');
   });
 
   it('bulkEdit: rejects empty IDs', async () => {
@@ -135,6 +139,18 @@ describe('DataTableComponent', () => {
     const { comp } = createComponent();
     await getAction(comp, 'filterBy').execute({ column: 'team', value: 'Frontend' });
     expect(comp['filteredData']().length).toBe(2);
+  });
+
+  it('clearFilter: clears an active table filter', async () => {
+    const { comp } = createComponent();
+    await getAction(comp, 'filterBy').execute({ column: 'team', value: 'Frontend' });
+
+    const result = await getAction(comp, 'clearFilter').execute({});
+
+    expect(result.success).toBe(true);
+    expect(comp['filterColumn']()).toBe('');
+    expect(comp['filterText']()).toBe('');
+    expect(comp['filteredData']().length).toBe(5);
   });
 
   it('selectRow: selects by ID', async () => {
@@ -240,7 +256,10 @@ describe('DataTableComponent', () => {
     const comp = fixture.componentInstance;
     fixture.componentRef.setInput('agenticId', 'tbl');
     fixture.componentRef.setInput('columns', ['name']);
-    fixture.componentRef.setInput('data', [{ id: '1', name: 'Alice' }, { id: '2', name: 'Bob' }]);
+    fixture.componentRef.setInput('data', [
+      { id: '1', name: 'Alice' },
+      { id: '2', name: 'Bob' },
+    ]);
     fixture.componentRef.setInput('idField', 'id');
     fixture.componentRef.setInput('showEditButton', true);
     fixture.detectChanges();

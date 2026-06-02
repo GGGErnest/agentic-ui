@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, Signal, signal } from '@angular/core';
 import { TestBed } from '@angular/core/testing';
 import { AgenticDirective } from './agentic.directive';
 import { AgentWorldService } from '../core/world/agent-world.service';
@@ -20,6 +20,19 @@ class TestHostComponent implements AgenticComponent {
   agenticId = 'host-id';
   agenticRole = 'TestHost';
   agenticActions: AgentAction[] = [makeAction('doSomething')];
+}
+
+@Component({
+  selector: 'test-signal-host',
+  standalone: true,
+  imports: [AgenticDirective],
+  template: `<div agentic></div>`,
+  providers: [{ provide: AGENTIC_COMPONENT, useExisting: TestSignalHostComponent }],
+})
+class TestSignalHostComponent implements AgenticComponent {
+  agenticId: Signal<string> = signal('signal-host-id');
+  agenticRole = 'SignalHost';
+  agenticActions: AgentAction[] = [makeAction('run')];
 }
 
 @Component({
@@ -69,6 +82,15 @@ describe('AgenticDirective', () => {
     expect(entry).toBeDefined();
     expect(entry!.role).toBe('TestHost');
     expect(entry!.actions[0].name).toBe('doSomething');
+  });
+
+  it('registers host component when token agenticId is a signal', () => {
+    const fixture = TestBed.createComponent(TestSignalHostComponent);
+    fixture.detectChanges();
+
+    const entry = world.entries().get('signal-host-id');
+    expect(entry).toBeDefined();
+    expect(entry!.role).toBe('SignalHost');
   });
 
   it('unregisters host component on destroy', () => {

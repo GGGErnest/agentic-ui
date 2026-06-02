@@ -1,4 +1,4 @@
-import { Injectable, signal, inject, DestroyRef } from '@angular/core';
+import { Injectable, signal, inject } from '@angular/core';
 import { AgentWorldService } from '../world/agent-world.service';
 import { LLMProvider, LLMMessage, ToolCall, LLMStreamChunk } from './llm-provider.interface';
 import { LLM_PROVIDER } from '../providers/llm-provider.token';
@@ -34,7 +34,7 @@ export interface ConversationHistory {
   steps: AgentStep[];
 }
 
-const DEFAULT_TIMEOUT_MS = 60_0000;
+const DEFAULT_TIMEOUT_MS = 60_000;
 const DEFAULT_MAX_STEPS = 20;
 
 /**
@@ -47,11 +47,10 @@ const DEFAULT_MAX_STEPS = 20;
  * 4. Waits for Angular stability before each observation.
  * 5. Maintains conversation history.
  */
-@Injectable()
+@Injectable({ providedIn: 'root' })
 export class AgentHarness {
   private readonly world = inject(AgentWorldService);
   private readonly llm = inject(LLM_PROVIDER);
-  private readonly destroyRef = inject(DestroyRef);
 
   /** Transparent thought stream exposed to the UI. */
   readonly thought = signal<string>('');
@@ -124,8 +123,10 @@ export class AgentHarness {
       if (first.role === 'assistant' && first.tool_calls && first.tool_calls.length > 0) {
         const satisfiedIds = new Set(
           slicedMessages
-            .filter((m) => m.role === 'tool' && m.tool_call_id)
-            .map((m) => m.tool_call_id!),
+            .filter((m): m is LLMMessage & { tool_call_id: string } =>
+              Boolean(m.role === 'tool' && m.tool_call_id),
+            )
+            .map((m) => m.tool_call_id),
         );
         const allSatisfied = first.tool_calls.every((tc) => satisfiedIds.has(tc.id));
         if (!allSatisfied) {

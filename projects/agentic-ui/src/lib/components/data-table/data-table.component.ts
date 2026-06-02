@@ -1,4 +1,13 @@
-import { Component, computed, EventEmitter, input, Output, output, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  computed,
+  EventEmitter,
+  input,
+  Output,
+  output,
+  signal,
+} from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { AgentAction, AgentActionResult } from '../../core/world/agent-action.model';
 import { AGENTIC_COMPONENT } from '../../core/world/agentic-component.token';
@@ -24,6 +33,7 @@ import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.mod
 @Component({
   selector: 'agui-data-table',
   standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule, AgenticDirective],
   providers: [{ provide: AGENTIC_COMPONENT, useExisting: DataTableComponent }],
   template: `
@@ -188,6 +198,7 @@ export class DataTableComponent {
 
   @Output() readonly selectionChange = new EventEmitter<string[]>();
   @Output() readonly rowsDeleted = new EventEmitter<string[]>();
+  readonly bulkEdited = output<BulkEditOp>();
   readonly rowEdit = output<DataRow>();
 
   // ---- State ----
@@ -291,6 +302,11 @@ export class DataTableComponent {
       execute: (params) => this.doFilterBy(params as unknown as { column: string; value: string }),
     },
     {
+      name: 'clearFilter',
+      description: 'Clear the current table filter and show all rows.',
+      execute: () => this.doClearFilter(),
+    },
+    {
       name: 'selectRow',
       description: 'Select a row by ID for subsequent operations.',
       parameters: [{ name: 'id', type: 'string', description: 'Row ID', required: true }],
@@ -389,14 +405,9 @@ export class DataTableComponent {
       return { success: false, message: 'No changes provided.' };
     }
 
-    let affected = 0;
     const idSet = new Set(op.ids.map(String));
-    for (const row of this.data()) {
-      if (idSet.has(String(row[this.idField()]))) {
-        Object.assign(row, op.changes);
-        affected++;
-      }
-    }
+    const affected = this.data().filter((row) => idSet.has(String(row[this.idField()]))).length;
+    this.bulkEdited.emit({ ids: op.ids, changes: op.changes });
 
     return {
       success: true,
@@ -459,6 +470,12 @@ export class DataTableComponent {
       success: true,
       message: `Filtered by "${params.column}" = "${params.value}". ${count} row(s) visible.`,
     };
+  }
+
+  private async doClearFilter(): Promise<AgentActionResult> {
+    this.filterColumn.set('');
+    this.filterText.set('');
+    return { success: true, message: 'Table filter cleared.' };
   }
 
   private async doSelectRow(params: { id: string }): Promise<AgentActionResult> {

@@ -1,8 +1,8 @@
-import { InjectionToken } from '@angular/core';
+import { InjectionToken, Signal } from '@angular/core';
 import { AgentAction } from './agent-action.model';
 
 export interface AgenticComponent {
-  agenticId: string;
+  agenticId: string | Signal<string>;
   agenticRole?: string;
   agenticActions: AgentAction[];
   agenticMetadata?: Record<string, unknown>;

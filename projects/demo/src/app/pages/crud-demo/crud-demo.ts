@@ -6,6 +6,7 @@ import {
   AgentAction,
   AgentActionResult,
   AgentWorldService,
+  BulkEditOp,
   DataRow,
 } from 'agentic-ui';
 
@@ -205,6 +206,18 @@ export class CrudDemo {
 
   onTableSelectionChange(ids: string[]): void {
     this.selectedTaskIds.set(ids);
+  }
+
+  onRowsEdited(edit: BulkEditOp): void {
+    const editedSet = new Set(edit.ids.map(String));
+    this.tasks.update((list) =>
+      list.map((task) => (editedSet.has(task.id) ? { ...task, ...edit.changes } : task)),
+    );
+    this.activity.log({
+      type: 'task_edited',
+      description: `Edited ${edit.ids.length} task(s)`,
+      metadata: { ids: edit.ids, changes: edit.changes },
+    });
   }
 
   onRowsDeleted(deletedIds: string[]): void {

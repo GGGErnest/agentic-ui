@@ -4,14 +4,23 @@
   agenticId="task-ops"
   role="Task Operations"
   [actions]="pageActions"
+  [readables]="pageReadables"
 >
   <header class="demo-header">
     <h1>🧪 Agentic-UI Demo</h1>
     <p class="demo-subtitle">
-      This page is instrumented for AI agents. Every button and the data table expose their
-      capabilities through the World Registry — no DOM scraping needed.
+      This page shows schema-based agent actions, readable runtime state, and live dropzone-driven
+      helper rendering.
     </p>
   </header>
+
+  <section class="agent-showcase">
+    <div class="agent-showcase__header">
+      <h2>Agent Showcase</h2>
+      <p>Ask agent to inspect state, surface ambiguity, or render helper cards here.</p>
+    </div>
+    <div aguiDropzone class="agent-showcase__zone"></div>
+  </section>
 
   <app-task-toolbar
     [taskCount]="tasks().length"

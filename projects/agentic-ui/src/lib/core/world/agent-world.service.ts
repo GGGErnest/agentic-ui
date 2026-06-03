@@ -3,8 +3,11 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { BehaviorSubject, firstValueFrom, Subject } from 'rxjs';
 import { filter } from 'rxjs/operators';
 import { AgentApprovalService } from '../approval/agent-approval.service';
-import { ActionParameter, AgentActionResult } from './agent-action.model';
+import { ActionParameter, AgentActionResult, AgentAction } from './agent-action.model';
 import { SnapshotConfig, ToolDefinition, WorldEntry, WorldSnapshot } from './world-entry.interface';
+import { AgentJsonSchema, JsonSchemaProperty } from '../schema/agent-json-schema.model';
+import { AgentReadable, AgentWritableResult } from '../state/agent-readable.model';
+import { validateAgentJsonSchema } from '../schema/agent-json-schema.validator';
 
 /**
  * AgentWorldService — the "Sensory Cortex" of the Agentic-UI framework.
@@ -61,6 +64,13 @@ export class AgentWorldService {
   constructor() {
     this.setupIntersectionObserver();
     this.setupStabilityTracking();
+    
+    // Cleanup: disconnect IntersectionObserver when service is destroyed
+    this.destroyRef.onDestroy(() => {
+      if (this.observer) {
+        this.observer.disconnect();
+      }
+    });
   }
 
   // ---- Registration ----
@@ -77,6 +87,12 @@ export class AgentWorldService {
     for (const item of entry.actions) {
       if (!SCHEMA_RULE.test(item.name) || item.name.includes('__')) {
         throw new Error(`[Agentic-UI Verification Error] Action naming constraint failure: Action key "${item.name}" bound to "${entry.id}" contains illegal tokens.`);
+      }
+    }
+
+    for (const readable of entry.readables ?? []) {
+      if (!SCHEMA_RULE.test(readable.name) || readable.name.includes('__')) {
+        throw new Error(`[Agentic-UI Verification Error] Readable naming constraint failure: Readable key "${readable.name}" bound to "${entry.id}" contains illegal tokens.`);
       }
     }
 
@@ -150,6 +166,21 @@ export class AgentWorldService {
       };
     }
 
+    if (action.inputSchema) {
+      const validation = validateAgentJsonSchema(action.inputSchema, params ?? {});
+      if (!validation.valid) {
+        return { success: false, message: `Invalid params: ${validation.message ?? 'unknown error'}` };
+      }
+    }
+
+    if (!action.inputSchema && action.parameters) {
+      const schema = this.paramsToLegacySchema(action.parameters);
+      const validation = validateAgentJsonSchema(schema, params ?? {});
+      if (!validation.valid) {
+        return { success: false, message: `Invalid params: ${validation.message ?? 'unknown error'}` };
+      }
+    }
+
     // Approval gate — pause for human confirmation on destructive actions
     if (action.requiresApproval) {
       const approved = await this.approval.requestApproval(
@@ -179,6 +210,58 @@ export class AgentWorldService {
     }
   }
 
+  /** Update a readable (writable state) on a registered entry. */
+  async updateReadable(
+    entryId: string,
+    readableName: string,
+    value: unknown,
+  ): Promise<AgentWritableResult> {
+    const entry = this._entries().get(entryId);
+    if (!entry) {
+      return { success: false, message: `Entry "${entryId}" not found in world registry.` };
+    }
+
+    const readable = (entry.readables ?? []).find((r) => r.name === readableName);
+    if (!readable) {
+      return {
+        success: false,
+        message: `Readable "${readableName}" not found on entry "${entryId}".`,
+      };
+    }
+
+    if (!readable.write) {
+      return {
+        success: false,
+        message: `Readable "${readableName}" on entry "${entryId}" is not writable.`,
+      };
+    }
+
+    this.focus(entryId);
+
+    if (this.shadowMode()) {
+      return {
+        success: true,
+        message: `[SHADOW] Simulated update of "${readableName}" on "${entryId}" to ${JSON.stringify(value)}`,
+      };
+    }
+
+    const validation = validateAgentJsonSchema(readable.schema, { value });
+    if (!validation.valid) {
+      return { success: false, message: `Invalid readable value: ${validation.message ?? 'unknown error'}` };
+    }
+
+    try {
+      const result = await readable.write(value);
+      this.appRef.tick();
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        message: `Update of "${readableName}" failed: ${error instanceof Error ? error.message : String(error)}`,
+      };
+    }
+  }
+
   // ---- LLM Snapshot ----
 
   /**
@@ -191,6 +274,7 @@ export class AgentWorldService {
     const maxTools = config.maxTools ?? 20;
     const maxContextLen = config.maxContextLen ?? 2000;
     const prioritySet = new Set(config.priorityRoles ?? []);
+
 
     // Expose all items to prevent the LLM from missing out-of-view targets
     const allEntries = this._entries();
@@ -208,52 +292,54 @@ export class AgentWorldService {
       (entry.role === 'Modal' || entry.role === 'Overlay' || entry.role === 'Dialog') && visibleIds.has(entry.id)
     );
 
-    const entries: { id: string; role: string; isVisible: boolean; isOccluded: boolean; actions: string[] }[] = [];
-    const interactiveEntriesMap = new Map<string, WorldEntry>();
+     const entries: { id: string; role: string; isVisible: boolean; isOccluded: boolean; actions: string[]; readables: string[] }[] = [];
+     const interactiveEntriesMap = new Map<string, WorldEntry>();
 
-    for (const [id, entry] of sorted) {
-      let isOccluded = false;
+     for (const [id, entry] of sorted) {
+       let isOccluded = false;
 
-      // If a modal layer exists, evaluate whether this element is trapped behind it
-      if (activeModalEntry && activeModalEntry[1].id !== id) {
-        const modalElement = activeModalEntry[1].element;
-        const targetElement = entry.element;
+       // If a modal layer exists, evaluate whether this element is trapped behind it
+       if (activeModalEntry && activeModalEntry[1].id !== id) {
+         const modalElement = activeModalEntry[1].element;
+         const targetElement = entry.element;
 
-        if (modalElement && targetElement) {
-          // If the element is NOT part of the modal's DOM tree, it is occluded by the backdrop
-          isOccluded = !modalElement.contains(targetElement);
-        } else if (modalElement) {
-          // Modal has an element but target doesn't — treat target as occluded
-          isOccluded = true;
-        }
-        // If neither has an element (no DOM), skip occlusion — can't verify
-      }
+         if (modalElement && targetElement) {
+           // If the element is NOT part of the modal's DOM tree, it is occluded by the backdrop
+           isOccluded = !modalElement.contains(targetElement);
+         } else if (modalElement) {
+           // Modal has an element but target doesn't — treat target as occluded
+           isOccluded = true;
+         }
+         // If neither has an element (no DOM), skip occlusion — can't verify
+       }
 
-      const isVisible = visibleIds.has(id);
-      entries.push({
-        id,
-        role: entry.role,
-        isVisible: isVisible,
-        isOccluded: isOccluded,
-        actions: entry.actions.map((a) => a.name),
-      });
+       const isVisible = visibleIds.has(id);
+       entries.push({
+         id,
+         role: entry.role,
+         isVisible: isVisible,
+         isOccluded: isOccluded,
+         actions: entry.actions.map((a) => a.name),
+         readables: (entry.readables ?? []).map((r) => r.name),
+       });
 
-      // Only allow tool generation if the component is visible AND not blocked by an overlay
-      if (isVisible && !isOccluded) {
-        interactiveEntriesMap.set(id, entry);
-      }
-    }
+       // Only allow tool generation if the component is visible AND not blocked by an overlay
+       if (isVisible && !isOccluded) {
+         interactiveEntriesMap.set(id, entry);
+       }
+     }
 
-    let context =
-      entries.length === 0
-        ? 'No interactive components exist on this page.'
-        : 'Interactive components on the page:\n' +
-          entries.map((e) => {
-            const status = e.isOccluded
-              ? 'Occluded/Inert - Blocked by Modal Overlay'
-              : `Visible In Viewport: ${e.isVisible}`;
-            return `  [${e.id}] ${e.role} (${status}) — actions: ${e.actions.join(', ')}`;
-          }).join('\n');
+     let context =
+       entries.length === 0
+         ? 'No interactive components exist on this page.'
+         : 'Interactive components on the page:\n' +
+           entries.map((e) => {
+             const status = e.isOccluded
+               ? 'Occluded/Inert - Blocked by Modal Overlay'
+               : `Visible In Viewport: ${e.isVisible}`;
+             const stateStr = e.readables.length > 0 ? ` — state: ${e.readables.join(', ')}` : '';
+             return `  [${e.id}] ${e.role} (${status}) — actions: ${e.actions.join(', ')}${stateStr}`;
+           }).join('\n');
 
     // Truncate context if over budget
     const truncationSuffix = '\n... (additional entries truncated)';
@@ -269,6 +355,28 @@ export class AgentWorldService {
     );
 
     return { context, tools };
+  }
+
+  async snapshotAsync(config: SnapshotConfig = {}): Promise<WorldSnapshot> {
+    const snapshot = this.snapshot(config);
+    const allEntries = this._entries();
+
+    const readableValues: string[] = [];
+    for (const entry of allEntries.values()) {
+      for (const readable of entry.readables ?? []) {
+        try {
+          const result = await readable.read();
+          readableValues.push(`${readable.name}: ${JSON.stringify(result.value)}`);
+        } catch (error) {
+          readableValues.push(`${readable.name}: [error: ${error instanceof Error ? error.message : String(error)}]`);
+        }
+      }
+    }
+
+    return {
+      ...snapshot,
+      context: readableValues.length > 0 ? `${snapshot.context}\nState:\n${readableValues.join('\n')}` : snapshot.context,
+    };
   }
 
   // ---- Internal ----
@@ -326,19 +434,59 @@ export class AgentWorldService {
     maxTools?: number,
   ): ToolDefinition[] {
     const tools: ToolDefinition[] = [];
+    const MAX_TOOL_NAME_LENGTH = 64; // OpenAI schema constraint
 
     for (const [entryId, entry] of entries) {
       if (maxTools !== undefined && tools.length >= maxTools) break;
+      
+      // Build tools for actions
       for (const action of entry.actions) {
         if (maxTools !== undefined && tools.length >= maxTools) break;
+        
+        const toolName = `${entryId}__${action.name}`;
+        if (toolName.length > MAX_TOOL_NAME_LENGTH) {
+          throw new Error(
+            `[Agentic-UI Tool Name Error] Combined tool name "${toolName}" exceeds ${MAX_TOOL_NAME_LENGTH} character limit. ` +
+            `Entry: "${entryId}" (${entryId.length} chars), Action: "${action.name}" (${action.name.length} chars), ` +
+            `Total: ${toolName.length} chars (including "__" separator).`
+          );
+        }
+        
+        // Use inputSchema if available, otherwise fall back to legacy parameters
+        const parameters: { type: 'object'; properties: Record<string, unknown>; required?: string[] } = action.inputSchema
+          ? this.jsonSchemaToToolParameters(action.inputSchema)
+          : (action.parameters
+              ? this.paramsToLegacySchema(action.parameters)
+              : { type: 'object', properties: {} });
+        
         tools.push({
           type: 'function',
           function: {
-            name: `${entryId}__${action.name}`,
+            name: toolName,
             description: `[${entry.role}] ${action.description}`,
-            parameters: action.parameters
-              ? this.paramsToSchema(action.parameters)
-              : { type: 'object', properties: {} },
+            parameters,
+          },
+        });
+      }
+
+      // Build tools for writable readables (setter tools)
+      for (const readable of entry.readables ?? []) {
+        if (maxTools !== undefined && tools.length >= maxTools) break;
+        if (!readable.writable) continue; // Skip read-only readables
+
+        const toolName = `${entryId}__set_${readable.name}`;
+        if (toolName.length > MAX_TOOL_NAME_LENGTH) {
+          throw new Error(
+            `[Agentic-UI Tool Name Error] Combined tool name "${toolName}" exceeds ${MAX_TOOL_NAME_LENGTH} character limit.`
+          );
+        }
+
+        tools.push({
+          type: 'function',
+          function: {
+            name: toolName,
+            description: `[${entry.role}] Update state: ${readable.description}`,
+            parameters: this.jsonSchemaToToolParameters(readable.schema, 'value'),
           },
         });
       }
@@ -347,16 +495,89 @@ export class AgentWorldService {
     return tools;
   }
 
-  private paramsToSchema(params: ActionParameter[]): {
+  /** Convert JSON Schema to OpenAI tool parameters format. */
+  private jsonSchemaToToolParameters(
+    schema: AgentJsonSchema,
+    wrapperProp?: string,
+  ): {
     type: 'object';
     properties: Record<string, unknown>;
     required?: string[];
   } {
+    if (wrapperProp) {
+      // For readable setters, wrap the schema value in a property
+      return {
+        type: 'object',
+        properties: {
+          [wrapperProp]: this.schemaPropertyToToolProperty(schema),
+        },
+        required: [wrapperProp],
+      };
+    }
+
+    // Direct schema-to-parameters conversion
     const properties: Record<string, unknown> = {};
     const required: string[] = [];
 
+    for (const [propName, prop] of Object.entries(schema.properties ?? {})) {
+      properties[propName] = this.schemaPropertyToToolProperty(prop);
+      if (schema.required?.includes(propName)) {
+        required.push(propName);
+      }
+    }
+
+    return {
+      type: 'object',
+      properties,
+      ...(required.length > 0 ? { required } : {}),
+    };
+  }
+
+  /** Convert a JSON Schema property to OpenAI tool property format. */
+  private schemaPropertyToToolProperty(prop: JsonSchemaProperty): Record<string, unknown> {
+    const toolProp: Record<string, unknown> = {
+      type: prop.type,
+    };
+
+    if (prop.description) toolProp['description'] = prop.description;
+    if (prop.enum) toolProp['enum'] = prop.enum;
+    if (prop.default !== undefined) toolProp['default'] = prop.default;
+    if (prop.minimum !== undefined) toolProp['minimum'] = prop.minimum;
+    if (prop.maximum !== undefined) toolProp['maximum'] = prop.maximum;
+    if (prop.minLength !== undefined) toolProp['minLength'] = prop.minLength;
+    if (prop.maxLength !== undefined) toolProp['maxLength'] = prop.maxLength;
+    if (prop.pattern !== undefined) toolProp['pattern'] = prop.pattern;
+
+    // For arrays, preserve items schema
+    if (prop.type === 'array' && prop.items) {
+      toolProp['items'] = this.schemaPropertyToToolProperty(prop.items);
+    }
+
+    // For objects, preserve nested properties
+    if (prop.type === 'object' && prop.properties) {
+      const nestedProps: Record<string, unknown> = {};
+      const nestedRequired: string[] = [];
+
+      for (const [nestedName, nestedProp] of Object.entries(prop.properties)) {
+        nestedProps[nestedName] = this.schemaPropertyToToolProperty(nestedProp);
+        if (prop.required?.includes(nestedName)) {
+          nestedRequired.push(nestedName);
+        }
+      }
+
+      toolProp['properties'] = nestedProps;
+      if (nestedRequired.length > 0) toolProp['required'] = nestedRequired;
+    }
+
+    return toolProp;
+  }
+
+  private paramsToLegacySchema(params: ActionParameter[]): AgentJsonSchema {
+    const properties: Record<string, JsonSchemaProperty> = {};
+    const required: string[] = [];
+
     for (const p of params) {
-      const fieldSchema: Record<string, unknown> = {
+      const fieldSchema: JsonSchemaProperty = {
         type: p.type,
         description: p.description,
       };
@@ -367,7 +588,7 @@ export class AgentWorldService {
 
       // If type is an array, explicitly specify string items for high-performance extraction compliance
       if (p.type === 'array') {
-        fieldSchema['items'] = { type: 'string' };
+        fieldSchema.items = { type: 'string' };
       }
 
       properties[p.name] = fieldSchema;

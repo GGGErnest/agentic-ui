@@ -1,6 +1,7 @@
 import { Directive, effect, ElementRef, inject, input, OnDestroy } from '@angular/core';
 import { AgentWorldService } from '../core/world/agent-world.service';
 import { AgentAction } from '../core/world/agent-action.model';
+import { AgentReadable } from '../core/state/agent-readable.model';
 import { AGENTIC_COMPONENT } from '../core/world/agentic-component.token';
 
 /**
@@ -15,7 +16,7 @@ import { AGENTIC_COMPONENT } from '../core/world/agentic-component.token';
  *    ```
  *
  * 2. Input mode (native elements, third-party components): Pass agenticId, role,
- *    actions, and metadata as template inputs.
+ *    actions, readables, and metadata as template inputs.
  *    ```html
  *    <button agentic agenticId="submit-btn" [actions]="btnActions">Submit</button>
  *    ```
@@ -41,6 +42,8 @@ export class AgenticDirective implements OnDestroy {
 
   readonly actions = input<AgentAction[]>([]);
 
+  readonly readables = input<AgentReadable[]>([]);
+
   readonly metadata = input<Record<string, unknown>>({});
 
   private registeredId: string | null = null;
@@ -55,16 +58,20 @@ export class AgenticDirective implements OnDestroy {
 
       const role = host ? (host.agenticRole ?? 'UI Component') : this.role();
       const actions = host ? host.agenticActions : this.actions();
+      const readables = host ? (host.agenticReadables ?? []) : this.readables();
       const metadata = host ? (host.agenticMetadata ?? {}) : this.metadata();
 
       const elementToRegister = this.agenticElement() ?? this.el.nativeElement;
       this.el.nativeElement.setAttribute('data-agentic-id', id);
+      if (elementToRegister !== this.el.nativeElement) {
+        elementToRegister.setAttribute('data-agentic-id', id);
+      }
 
       if (this.registeredId && this.registeredId !== id) {
         this.world.unregister(this.registeredId);
       }
 
-      this.world.register({ id, role, actions, element: elementToRegister, metadata });
+      this.world.register({ id, role, actions, readables, element: elementToRegister, metadata });
 
       this.registeredId = id;
     });

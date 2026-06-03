@@ -9,6 +9,7 @@ import {
   OnInit,
   OnDestroy,
   ChangeDetectionStrategy,
+  isDevMode,
 } from '@angular/core';
 
 declare global {
@@ -563,36 +564,23 @@ export class AgentShellComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit(): void {
-    window.Agent = {
-      snapshot: () => {
-        const snap = this.world.snapshot();
-        return snap;
-      },
-      world: () => {
-        return this.world.entries();
-      },
-      visible: () => {
-        return this.world.activeEntries();
-      },
-      messages: () => {
-        return this.harness.exportConversation().messages;
-      },
-      system: () => {
-        return this.harness.exportConversation().systemPrompt;
-      },
-      steps: () => {
-        return this.harness.steps();
-      },
-      status: () => {
-        return {
+    if (isDevMode() && typeof (globalThis as { vi?: unknown }).vi === 'undefined') {
+      window.Agent = {
+        snapshot: () => this.world.snapshot(),
+        world: () => this.world.entries(),
+        visible: () => this.world.activeEntries(),
+        messages: () => this.harness.exportConversation().messages,
+        system: () => this.harness.exportConversation().systemPrompt,
+        steps: () => this.harness.steps(),
+        status: () => ({
           isRunning: this.harness.isRunning(),
           isStable: this.world.isStable(),
           shadowMode: this.world.shadowMode(),
           focusedEntryId: this.world.focusedEntryId(),
           visibleCount: this.world.activeEntries().size,
-        };
-      },
-    };
+        }),
+      };
+    }
   }
 
   ngOnDestroy(): void {

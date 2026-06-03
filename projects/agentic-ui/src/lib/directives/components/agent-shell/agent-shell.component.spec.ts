@@ -29,4 +29,12 @@ describe('AgentShellComponent', () => {
 
     expect(fixture.nativeElement.querySelector('agui-telemetry-overlay')).not.toBeNull();
   });
+
+  it('does not expose window.Agent by default in test mode', () => {
+    const fixture = TestBed.createComponent(AgentShellComponent);
+    fixture.detectChanges();
+
+    expect(window.Agent).toBeUndefined();
+    fixture.destroy();
+  });
 });

@@ -23,6 +23,20 @@ export type {
   SnapshotConfig,
 } from './lib/core/world/world-entry.interface';
 
+// Core — Schema
+export type {
+  AgentJsonSchema,
+  JsonSchemaProperty,
+} from './lib/core/schema/agent-json-schema.model';
+
+// Core — State (Readables)
+export type {
+  AgentReadable,
+  AgentReadableDef,
+  AgentReadableResult,
+  AgentWritableResult,
+} from './lib/core/state/agent-readable.model';
+
 // Core — Harness (values)
 export { AgentHarness } from './lib/core/harness/agent-harness.service';
 export { LLM_PROVIDER } from './lib/core/providers/llm-provider.token';
@@ -44,12 +58,40 @@ export type {
 export { AgentApprovalService } from './lib/core/approval/agent-approval.service';
 export type { ApprovalTicket } from './lib/core/approval/agent-approval.service';
 
+// Core — MCP Transport (types)
+export type {
+  JsonRpcRequest,
+  JsonRpcSuccessResponse,
+  JsonRpcErrorResponse,
+  JsonRpcNotification,
+  JsonRpcError,
+  JsonRpcMessage,
+} from './lib/core/transport/json-rpc.models';
+export { JSON_RPC_ERROR_CODES } from './lib/core/transport/json-rpc.models';
+
+// Core — MCP Transport (values)
+export { McpToolAdapterService } from './lib/core/transport/mcp-tool-adapter.service';
+export type { McpTool, McpToolExecutionResult } from './lib/core/transport/mcp-tool-adapter.service';
+
+export { WebsocketTransportService, WebSocketState } from './lib/core/transport/websocket-transport.service';
+export type { ReconnectState } from './lib/core/transport/websocket-transport.service';
+
 // Core — Component Contract
 export type { AgenticComponent } from './lib/core/world/agentic-component.token';
 export { AGENTIC_COMPONENT } from './lib/core/world/agentic-component.token';
 
 // Directives
 export { AgenticDirective } from './lib/directives/agentic.directive';
+
+// Directives — Dropzone
+export { DropzoneDirective } from './lib/core/dropzone/dropzone.directive';
+export { ComponentRegistry } from './lib/core/dropzone/component-registry.service';
+export type {
+  RenderMode,
+  RenderConfig,
+  RenderResult,
+} from './lib/core/dropzone/dropzone.models';
+export type { ComponentMetadata } from './lib/core/dropzone/component-registry.service';
 
 // Providers
 export { OpenAiProvider, provideOpenAi } from './lib/core/providers/openai-provider.service';

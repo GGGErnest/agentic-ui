@@ -2,6 +2,7 @@
  * Core data models for the Agentic-UI World Registry.
  * These define the contract between UI components and AI agents.
  */
+import { AgentJsonSchema } from '../schema/agent-json-schema.model';
 
 /** Parameters schema for an action (sent to the LLM as tool definitions). */
 export interface ActionParameter {
@@ -19,6 +20,8 @@ export interface AgentActionDef {
   parameters?: ActionParameter[];
   /** If true, the agent must request human approval before execution. */
   requiresApproval?: boolean;
+  /** Optional JSON Schema for richer input validation and documentation. */
+  inputSchema?: AgentJsonSchema;
 }
 
 /** Result returned after executing an action. */

@@ -1,4 +1,5 @@
 import { AgentAction } from './agent-action.model';
+import { AgentReadable } from '../state/agent-readable.model';
 
 /**
  * An entry in the World Registry — represents a UI component's
@@ -11,6 +12,8 @@ export interface WorldEntry {
   role: string;
   /** Actions this component exposes to the agent. */
   actions: AgentAction[];
+  /** Readable state this component exposes to the agent. */
+  readables?: AgentReadable[];
   /** The DOM element (used for telemetry bounding box). */
   element?: HTMLElement;
   /** Arbitrary metadata for facade components. */

@@ -51,8 +51,6 @@ interface PendingMatchRequest {
     TaskFilterChipsComponent,
     TaskFormModalComponent,
     TaskChooserModalComponent,
-    AgentStatusCardComponent,
-    AgentResolutionCardComponent,
   ],
   templateUrl: './crud-demo.html',
   styleUrls: ['./crud-demo.scss'],

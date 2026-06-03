@@ -8,6 +8,11 @@ import {
   AgentWorldService,
   BulkEditOp,
   DataRow,
+  AgentJsonSchema,
+  AgentReadable,
+  DropzoneDirective,
+  ComponentRegistry,
+  RenderMode,
 } from 'agentic-ui';
 
 import { ActivityService } from '../../services/activity.service';
@@ -15,6 +20,8 @@ import { TaskToolbarComponent } from './task-toolbar/task-toolbar';
 import { TaskFilterChipsComponent } from './task-filter-chips/task-filter-chips';
 import { TaskFormModalComponent, TaskFormValue } from './task-form-modal/task-form-modal';
 import { TaskChooserModalComponent } from './task-chooser-modal/task-chooser-modal';
+import { AgentStatusCardComponent } from './agent-status-card/agent-status-card';
+import { AgentResolutionCardComponent } from './agent-resolution-card/agent-resolution-card';
 
 interface Task {
   [key: string]: unknown;
@@ -38,11 +45,14 @@ interface PendingMatchRequest {
   imports: [
     CommonModule,
     AgenticDirective,
+    DropzoneDirective,
     DataTableComponent,
     TaskToolbarComponent,
     TaskFilterChipsComponent,
     TaskFormModalComponent,
     TaskChooserModalComponent,
+    AgentStatusCardComponent,
+    AgentResolutionCardComponent,
   ],
   templateUrl: './crud-demo.html',
   styleUrls: ['./crud-demo.scss'],
@@ -51,8 +61,15 @@ export class CrudDemo {
   // ---- Injections ----
   private readonly world = inject(AgentWorldService);
   private readonly activity = inject(ActivityService);
+  private readonly registry = inject(ComponentRegistry);
 
+  @ViewChild(DropzoneDirective) agentZone?: DropzoneDirective;
   @ViewChild(DataTableComponent) taskTable?: DataTableComponent;
+
+  constructor() {
+    this.registry.register('agentStatusCard', AgentStatusCardComponent);
+    this.registry.register('agentResolutionCard', AgentResolutionCardComponent);
+  }
 
   // ---- Data ----
   readonly tasks = signal<Task[]>([
@@ -91,41 +108,163 @@ export class CrudDemo {
   readonly pendingMatchRequest = signal<PendingMatchRequest | null>(null);
   readonly pendingChoiceIds = signal<Set<string>>(new Set());
 
-  // ---- Agentic Actions ----
+  // ---- Agentic Actions & Readables ----
 
-  /** Task resolver action */
-  readonly taskResolverActions = [
+  readonly deleteRowsByCriteriaSchema: AgentJsonSchema = {
+    type: 'object',
+    properties: {
+      column: {
+        type: 'string',
+        enum: ['title', 'priority', 'status', 'assignee'],
+        description: 'Task field to match',
+      },
+      value: {
+        type: 'string',
+        description: 'Value to match',
+      },
+    },
+    required: ['column', 'value'],
+    additionalProperties: false,
+  };
+
+  readonly renderModeSchema: AgentJsonSchema = {
+    type: 'object',
+    properties: {
+      mode: {
+        type: 'string',
+        enum: ['append', 'replace'],
+        description: 'How to render into showcase zone',
+        default: 'replace',
+      },
+    },
+    additionalProperties: false,
+  };
+
+  readonly pageActions: AgentAction[] = [
     {
       name: 'deleteRowsByCriteria',
       description:
         'Delete task rows by matching a column value. If multiple rows match, open a chooser so the user can pick one or more rows.',
-      parameters: [
-        {
-          name: 'column',
-          type: 'string' as const,
-          description: 'One of: title, priority, status, assignee',
-          required: true,
-        },
-        {
-          name: 'value',
-          type: 'string' as const,
-          description: 'The value to match in that column',
-          required: true,
-        },
-      ],
+      inputSchema: this.deleteRowsByCriteriaSchema,
       execute: async (params: unknown) =>
         this.deleteRowsByCriteria(params as { column: string; value: string }),
     },
-  ];
-
-  /** Delete selected action */
-  readonly deleteSelectedAction: AgentAction[] = [
     {
       name: 'deleteSelected',
       description: 'Delete all currently selected tasks.',
       requiresApproval: true,
       execute: async () => this.deleteSelected(),
     },
+    {
+      name: 'showAgentStatusCard',
+      description: 'Render the current CRUD page status into the Agent Showcase panel.',
+      inputSchema: this.renderModeSchema,
+      execute: async (params) => this.showAgentStatusCard(params),
+    },
+    {
+      name: 'showResolutionCard',
+      description: 'Render the current pending match summary into the Agent Showcase panel.',
+      inputSchema: this.renderModeSchema,
+      execute: async (params) => this.showResolutionCard(params),
+    },
+    {
+      name: 'clearAgentZone',
+      description: 'Clear all rendered helper cards from the Agent Showcase panel.',
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      execute: async () => this.clearAgentZone(),
+    },
+  ];
+
+  private createValueReadable<T>(
+    name: string,
+    description: string,
+    readValue: () => T,
+    valueSchema: AgentJsonSchema['properties'][string],
+    writeValue?: (value: T) => void,
+  ): AgentReadable {
+    return {
+      name,
+      description,
+      schema: {
+        type: 'object',
+        properties: { value: valueSchema },
+        required: ['value'],
+        additionalProperties: false,
+      },
+      writable: !!writeValue,
+      read: async () => ({
+        success: true,
+        message: `Readable ${name} retrieved.`,
+        value: readValue(),
+      }),
+      write: writeValue
+        ? async (value) => {
+            writeValue(value as T);
+            return { success: true, message: `Readable ${name} updated.` };
+          }
+        : undefined,
+    };
+  }
+
+  readonly pageReadables: AgentReadable[] = [
+    this.createValueReadable(
+      'activeFilter',
+      'Current task priority filter.',
+      () => this.activeFilter(),
+      {
+        type: 'string',
+        enum: ['high', 'medium', 'low'],
+      },
+      (value) => this.activeFilter.set(typeof value === 'string' ? value : null),
+    ),
+    this.createValueReadable(
+      'selectedTaskIds',
+      'Current selected task ids.',
+      () => this.selectedTaskIds(),
+      {
+        type: 'array',
+        items: { type: 'string' },
+      },
+    ),
+    this.createValueReadable(
+      'selectedCount',
+      'Current selected task count.',
+      () => this.selectedCount(),
+      {
+        type: 'number',
+      },
+    ),
+    this.createValueReadable(
+      'showModal',
+      'Whether the task form modal is visible.',
+      () => this.showModal(),
+      {
+        type: 'boolean',
+      },
+    ),
+    this.createValueReadable(
+      'editId',
+      'Current task id being edited.',
+      () => this.editId(),
+      {
+        type: 'string',
+      },
+    ),
+    this.createValueReadable(
+      'pendingMatchRequest',
+      'Current pending delete-match resolution payload.',
+      () => this.pendingMatchRequest(),
+      { type: 'object' },
+    ),
+    this.createValueReadable(
+      'pendingChoiceIds',
+      'Current selected ids in chooser modal.',
+      () => [...this.pendingChoiceIds()],
+      {
+        type: 'array',
+        items: { type: 'string' },
+      },
+    ),
   ];
 
   // ---- Methods ----
@@ -294,6 +433,71 @@ export class CrudDemo {
       message: `Multiple rows matched "${params.value}" in column "${column}". Choose one or more rows in the page to continue.`,
       data: { matches },
     };
+  }
+
+  private getRenderMode(params: unknown): RenderMode {
+    return params && typeof (params as Record<string, unknown>)['mode'] === 'string'
+      ? ((params as Record<string, unknown>)['mode'] as RenderMode)
+      : 'replace';
+  }
+
+  private getPendingMatchSummary(): string {
+    const request = this.pendingMatchRequest();
+    if (!request) return 'none';
+    return request.matches.map((task) => `${task.id}:${task.title}`).join(', ');
+  }
+
+  async showAgentStatusCard(params: unknown): Promise<AgentActionResult> {
+    if (!this.agentZone) {
+      return { success: false, message: 'Agent showcase zone is not available.' };
+    }
+
+    this.agentZone.render(
+      'agentStatusCard',
+      {
+        activeFilter: this.activeFilter(),
+        selectedCount: this.selectedCount(),
+        selectedIdsLabel: this.selectedTaskIds().join(', ') || 'none',
+        showModal: this.showModal(),
+        editId: this.editId(),
+        pendingMatchLabel: this.getPendingMatchSummary(),
+      },
+      this.getRenderMode(params),
+    );
+
+    return { success: true, message: 'Agent status card rendered.' };
+  }
+
+  async showResolutionCard(params: unknown): Promise<AgentActionResult> {
+    const request = this.pendingMatchRequest();
+    if (!request) {
+      return { success: false, message: 'No pending match request available.' };
+    }
+    if (!this.agentZone) {
+      return { success: false, message: 'Agent showcase zone is not available.' };
+    }
+
+    this.agentZone.render(
+      'agentResolutionCard',
+      {
+        column: request.column,
+        value: request.value,
+        matchCount: request.matches.length,
+        matchesSummary: request.matches.map((task) => `${task.id}:${task.title}`).join(', '),
+      },
+      this.getRenderMode(params),
+    );
+
+    return { success: true, message: 'Resolution card rendered.' };
+  }
+
+  async clearAgentZone(): Promise<AgentActionResult> {
+    if (!this.agentZone) {
+      return { success: true, message: 'Agent showcase zone already clear.' };
+    }
+
+    this.agentZone.render('agentStatusCard', {}, 'clear');
+    return { success: true, message: 'Agent showcase zone cleared.' };
   }
 
   closeModal(): void {

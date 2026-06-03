@@ -27,7 +27,8 @@ describe('CrudDemo', () => {
       message: 'Deleted 0 row(s).',
     });
 
-    const result = await component.taskResolverActions[0].execute({
+    const deleteByCriteria = component.pageActions.find((action) => action.name === 'deleteRowsByCriteria');
+    const result = await deleteByCriteria!.execute({
       column: 'assignee',
       value: 'Alice',
     });
@@ -45,7 +46,8 @@ describe('CrudDemo', () => {
       message: 'Deleted 1 row(s).',
     });
 
-    await component.taskResolverActions[0].execute({
+    const deleteByCriteria = component.pageActions.find((action) => action.name === 'deleteRowsByCriteria');
+    await deleteByCriteria!.execute({
       column: 'title',
       value: 'dark mode',
     });
@@ -58,7 +60,8 @@ describe('CrudDemo', () => {
     component.taskTable!.filterColumn.set('status');
     component.taskTable!.filterText.set('done');
 
-    await component.taskResolverActions[0].execute({
+    const deleteByCriteria = component.pageActions.find((action) => action.name === 'deleteRowsByCriteria');
+    await deleteByCriteria!.execute({
       column: 'assignee',
       value: 'Alice',
     });
@@ -67,14 +70,16 @@ describe('CrudDemo', () => {
   });
 
   it('returns validation error when params lack required fields', async () => {
-    const result = await component.taskResolverActions[0].execute({});
+    const deleteByCriteria = component.pageActions.find((action) => action.name === 'deleteRowsByCriteria');
+    const result = await deleteByCriteria!.execute({});
 
     expect(result.success).toBe(false);
     expect(result.message).toBe('Invalid parameters: column and value are required strings.');
   });
 
   it('returns validation error when column is missing', async () => {
-    const result = await component.taskResolverActions[0].execute({
+    const deleteByCriteria = component.pageActions.find((action) => action.name === 'deleteRowsByCriteria');
+    const result = await deleteByCriteria!.execute({
       value: 'Alice',
     });
 
@@ -83,7 +88,8 @@ describe('CrudDemo', () => {
   });
 
   it('returns validation error when value is missing', async () => {
-    const result = await component.taskResolverActions[0].execute({
+    const deleteByCriteria = component.pageActions.find((action) => action.name === 'deleteRowsByCriteria');
+    const result = await deleteByCriteria!.execute({
       column: 'assignee',
     });
 
@@ -134,7 +140,8 @@ describe('CrudDemo', () => {
 
     component.onTableSelectionChange(['2', '5']);
 
-    await component.deleteSelectedAction[0].execute();
+    const deleteSelected = component.pageActions.find((action) => action.name === 'deleteSelected');
+    await deleteSelected!.execute();
 
     expect(executeSpy).toHaveBeenCalledWith('task-table', 'bulkDelete', { ids: ['2', '5'] });
   });
@@ -205,5 +212,97 @@ describe('CrudDemo', () => {
     const activity = TestBed.inject(ActivityService);
     component.onRowsDeleted(['1', '2']);
     expect(activity.events()[0].type).toBe('task_deleted');
+  });
+
+  it('exposes inputSchema on showcase actions', () => {
+    const deleteByCriteria = component.pageActions.find((action) => action.name === 'deleteRowsByCriteria');
+    const showStatus = component.pageActions.find((action) => action.name === 'showAgentStatusCard');
+    const showResolution = component.pageActions.find((action) => action.name === 'showResolutionCard');
+
+    expect(deleteByCriteria?.inputSchema).toEqual({
+      type: 'object',
+      properties: {
+        column: {
+          type: 'string',
+          enum: ['title', 'priority', 'status', 'assignee'],
+          description: 'Task field to match',
+        },
+        value: {
+          type: 'string',
+          description: 'Value to match',
+        },
+      },
+      required: ['column', 'value'],
+      additionalProperties: false,
+    });
+    expect(showStatus?.inputSchema?.properties['mode']).toBeDefined();
+    expect(showResolution?.inputSchema?.properties['mode']).toBeDefined();
+  });
+
+  it('exposes CRUD showcase readables from the root registration', async () => {
+    const names = component.pageReadables.map((readable) => readable.name);
+
+    expect(names).toEqual([
+      'activeFilter',
+      'selectedTaskIds',
+      'selectedCount',
+      'showModal',
+      'editId',
+      'pendingMatchRequest',
+      'pendingChoiceIds',
+    ]);
+
+    const activeFilterReadable = component.pageReadables.find((readable) => readable.name === 'activeFilter');
+    expect(activeFilterReadable?.writable).toBe(true);
+
+    const value = await activeFilterReadable?.read();
+    expect(value).toEqual({
+      success: true,
+      message: 'Readable activeFilter retrieved.',
+      value: null,
+    });
+  });
+
+  it('renders and clears helper cards through the showcase dropzone', async () => {
+    const showStatus = component.pageActions.find((action) => action.name === 'showAgentStatusCard');
+    const clearZone = component.pageActions.find((action) => action.name === 'clearAgentZone');
+
+    await showStatus?.execute({ mode: 'replace' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('app-agent-status-card')).toBeTruthy();
+
+    await clearZone?.execute({});
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('app-agent-status-card')).toBeFalsy();
+    expect(fixture.nativeElement.querySelector('app-agent-resolution-card')).toBeFalsy();
+  });
+
+  it('fails to render resolution card when there is no pending match request', async () => {
+    const showResolution = component.pageActions.find((action) => action.name === 'showResolutionCard');
+
+    const result = await showResolution?.execute({ mode: 'replace' });
+
+    expect(result).toEqual({
+      success: false,
+      message: 'No pending match request available.',
+    });
+  });
+
+  it('renders the resolution card when pending match state exists', async () => {
+    component.pendingMatchRequest.set({
+      intent: 'delete',
+      column: 'assignee',
+      value: 'Alice',
+      matches: component.tasks().filter((task) => task.assignee === 'Alice'),
+    });
+
+    const showResolution = component.pageActions.find((action) => action.name === 'showResolutionCard');
+    const result = await showResolution?.execute({ mode: 'replace' });
+    fixture.detectChanges();
+
+    expect(result?.success).toBe(true);
+    expect(fixture.nativeElement.querySelector('app-agent-resolution-card')).toBeTruthy();
   });
 });

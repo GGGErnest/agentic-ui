@@ -8,6 +8,7 @@ import { AgentWorldService } from '../world/agent-world.service';
 import { AgentAction, AgentActionResult } from '../world/agent-action.model';
 import { AgentReadable, AgentReadableResult, AgentWritableResult } from '../state/agent-readable.model';
 import { AgentJsonSchema, JsonSchemaProperty } from '../schema/agent-json-schema.model';
+import { ToolNameCodec } from '../events/tool-name-codec';
 
 /** MCP Tool definition (compatible with OpenAI tools format). */
 export interface McpTool {
@@ -36,6 +37,7 @@ export interface McpToolExecutionResult {
 @Injectable({ providedIn: 'root' })
 export class McpToolAdapterService {
   private readonly world = inject(AgentWorldService);
+  private readonly codec = new ToolNameCodec();
 
   /**
    * Get all MCP tools from the active World entries.
@@ -137,33 +139,23 @@ export class McpToolAdapterService {
   }
 
   private composeActionToolName(entryId: string, actionName: string): string {
-    return `${entryId}__action__${actionName}`;
+    return this.codec.encodeAction(entryId, actionName);
   }
 
   private composeReadableToolName(entryId: string, readableName: string, mode: 'read' | 'write'): string {
-    return `${entryId}__${mode}__${readableName}`;
+    return this.codec.encodeReadable(entryId, readableName, mode);
   }
 
   private resolveToolTarget(toolName: string): ResolvedToolTarget | null {
-    const actionSep = '__action__';
-    const readableReadSep = '__read__';
-    const readableWriteSep = '__write__';
-
-    if (toolName.includes(actionSep)) {
-      const idx = toolName.indexOf(actionSep);
-      return { entryId: toolName.slice(0, idx), toolName: toolName.slice(idx + actionSep.length) };
+    const k = this.codec.kind(toolName);
+    if (k === 'action') {
+      const d = this.codec.decodeAction(toolName);
+      return { entryId: d.entryId, toolName: d.actionName };
     }
-
-    if (toolName.includes(readableReadSep)) {
-      const idx = toolName.indexOf(readableReadSep);
-      return { entryId: toolName.slice(0, idx), toolName: `read__${toolName.slice(idx + readableReadSep.length)}` };
+    if (k === 'read' || k === 'write') {
+      const d = this.codec.decodeReadable(toolName);
+      return { entryId: d.entryId, toolName: `${k}__${d.readableName}` };
     }
-
-    if (toolName.includes(readableWriteSep)) {
-      const idx = toolName.indexOf(readableWriteSep);
-      return { entryId: toolName.slice(0, idx), toolName: `write__${toolName.slice(idx + readableWriteSep.length)}` };
-    }
-
     return null;
   }
 

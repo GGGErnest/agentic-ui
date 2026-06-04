@@ -483,9 +483,9 @@ describe('AgentHarness', () => {
     });
   });
 
-  // ========== Parse Tool Name ==========
+  // ========== Codec Tool Name ==========
 
-  describe('parseToolName', () => {
+  describe('codec.decodeAction', () => {
     it('should correctly split entryId and actionName', () => {
       const result = harness['codec'].decodeAction('table-1__action__deleteRow');
       expect(result).toEqual({ entryId: 'table-1', actionName: 'deleteRow' });

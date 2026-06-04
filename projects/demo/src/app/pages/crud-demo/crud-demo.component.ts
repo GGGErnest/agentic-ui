@@ -1,5 +1,4 @@
-import { Component, computed, inject, signal, ViewChild } from '@angular/core';
-import { CommonModule } from '@angular/common';
+import { Component, computed, inject, signal, viewChild } from '@angular/core';
 import {
   AgenticDirective,
   DataTableComponent,
@@ -43,7 +42,6 @@ interface PendingMatchRequest {
   selector: 'app-crud-demo',
   standalone: true,
   imports: [
-    CommonModule,
     AgenticDirective,
     DropzoneDirective,
     DataTableComponent,
@@ -61,8 +59,8 @@ export class CrudDemo {
   private readonly activity = inject(ActivityService);
   private readonly registry = inject(ComponentRegistry);
 
-  @ViewChild(DropzoneDirective) agentZone?: DropzoneDirective;
-  @ViewChild(DataTableComponent) taskTable?: DataTableComponent;
+  private readonly agentZone = viewChild(DropzoneDirective);
+  readonly taskTable = viewChild(DataTableComponent);
 
   constructor() {
     this.registry.register('agentStatusCard', AgentStatusCardComponent);
@@ -446,11 +444,11 @@ export class CrudDemo {
   }
 
   async showAgentStatusCard(params: unknown): Promise<AgentActionResult> {
-    if (!this.agentZone) {
+    if (!this.agentZone()) {
       return { success: false, message: 'Agent showcase zone is not available.' };
     }
 
-    this.agentZone.render(
+    this.agentZone()!.render(
       'agentStatusCard',
       {
         activeFilter: this.activeFilter(),
@@ -471,11 +469,11 @@ export class CrudDemo {
     if (!request) {
       return { success: false, message: 'No pending match request available.' };
     }
-    if (!this.agentZone) {
+    if (!this.agentZone()) {
       return { success: false, message: 'Agent showcase zone is not available.' };
     }
 
-    this.agentZone.render(
+    this.agentZone()!.render(
       'agentResolutionCard',
       {
         column: request.column,
@@ -490,11 +488,11 @@ export class CrudDemo {
   }
 
   async clearAgentZone(): Promise<AgentActionResult> {
-    if (!this.agentZone) {
+    if (!this.agentZone()) {
       return { success: true, message: 'Agent showcase zone already clear.' };
     }
 
-    this.agentZone.render('agentStatusCard', {}, 'clear');
+    this.agentZone()!.render('agentStatusCard', {}, 'clear');
     return { success: true, message: 'Agent showcase zone cleared.' };
   }
 

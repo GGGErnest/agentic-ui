@@ -57,8 +57,8 @@ describe('CrudDemo', () => {
   });
 
   it('searches the full dataset even when the table is filtered', async () => {
-    component.taskTable!.filterColumn.set('status');
-    component.taskTable!.filterText.set('done');
+    component.taskTable()?.filterColumn.set('status');
+    component.taskTable()?.filterText.set('done');
 
     const deleteByCriteria = component.pageActions.find((action) => action.name === 'deleteRowsByCriteria');
     await deleteByCriteria!.execute({

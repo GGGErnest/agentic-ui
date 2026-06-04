@@ -1,0 +1,11 @@
+<article class="agent-card">
+  <h3>Agent Status</h3>
+  <dl>
+    <div><dt>Filter</dt><dd>{{ activeFilter() ?? 'none' }}</dd></div>
+    <div><dt>Selected</dt><dd>{{ selectedCount() }}</dd></div>
+    <div><dt>Selection</dt><dd>{{ selectedIdsLabel() }}</dd></div>
+    <div><dt>Modal</dt><dd>{{ showModal() ? 'open' : 'closed' }}</dd></div>
+    <div><dt>Edit Target</dt><dd>{{ editId() ?? 'none' }}</dd></div>
+    <div><dt>Pending Match</dt><dd>{{ pendingMatchLabel() }}</dd></div>
+  </dl>
+</article>

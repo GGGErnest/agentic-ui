@@ -1,10 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { LLM_PROVIDER, AgentAction } from 'agentic-ui';
-import { UserProfile } from './user-profile';
-import { ProfileIdentity } from './profile-identity/profile-identity';
-import { ProfilePreferences } from './profile-preferences/profile-preferences';
-import { ProfileActivity } from './profile-activity/profile-activity';
+import { UserProfile } from './user-profile.component';
+import { ProfileIdentity } from './profile-identity/profile-identity.component';
+import { ProfilePreferences } from './profile-preferences/profile-preferences.component';
+import { ProfileActivity } from './profile-activity/profile-activity.component';
 
 const mockLlmProvider = {
   chat: async () => ({ content: '', role: 'assistant' as const }),

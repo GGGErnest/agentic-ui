@@ -1,5 +1,5 @@
 import { TestBed } from '@angular/core/testing';
-import { ProfilePreferences } from './profile-preferences';
+import { ProfilePreferences } from './profile-preferences.component';
 import { ActivityService } from '../../../services/activity.service';
 import { vi } from 'vitest';
 

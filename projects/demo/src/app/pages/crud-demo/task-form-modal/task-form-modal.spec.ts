@@ -1,6 +1,6 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
 import { AgentWorldService } from 'agentic-ui';
-import { TaskFormModalComponent } from './task-form-modal';
+import { TaskFormModalComponent } from './task-form-modal.component';
 
 function createComponent(overrides: Record<string, unknown> = {}) {
   TestBed.resetTestingModule();

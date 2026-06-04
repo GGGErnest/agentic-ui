@@ -1,5 +1,5 @@
 import { TestBed, ComponentFixture } from '@angular/core/testing';
-import { ProfileActivity } from './profile-activity';
+import { ProfileActivity } from './profile-activity.component';
 import { ActivityService } from '../../../services/activity.service';
 
 describe('ProfileActivity', () => {

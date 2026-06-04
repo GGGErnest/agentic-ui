@@ -12,7 +12,7 @@ import { CommonModule } from '@angular/common';
 import { AgentAction, AgentActionResult } from '../../core/world/agent-action.model';
 import { AGENTIC_COMPONENT } from '../../core/world/agentic-component.token';
 import { AgenticDirective } from '../../directives/agentic.directive';
-import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.models';
+import { DataRow, RowQuery, BulkEditOp } from './data-table.models';
 
 /**
  * DataTableFacade — reference implementation of the Facade Pattern.
@@ -36,138 +36,8 @@ import { DataRow, RowQuery, BulkEditOp, DataTableResult } from './data-table.mod
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [CommonModule, AgenticDirective],
   providers: [{ provide: AGENTIC_COMPONENT, useExisting: DataTableComponent }],
-  template: `
-    <div class="data-table" agentic [agenticId]="agenticId()">
-      <div class="data-table__toolbar">
-        <span class="data-table__title">{{ title() }}</span>
-        <span class="data-table__count">{{ filteredData().length }} / {{ totalRows() }} rows</span>
-      </div>
-
-      <table class="data-table__table">
-        <thead>
-          <tr>
-            @for (col of columns(); track col) {
-              <th (click)="toggleSort(col)">
-                {{ col }}
-                @if (sortColumn() === col) {
-                  <span>{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
-                }
-              </th>
-            }
-            @if (showEditButton()) {
-              <th class="data-table__actions-col">Actions</th>
-            }
-            <th class="data-table__select-col">#</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (row of filteredData(); track row[idField()]) {
-            <tr [class.selected]="isSelected(row[idField()])">
-              @for (col of columns(); track col) {
-                <td>{{ row[col] }}</td>
-              }
-              @if (showEditButton()) {
-                <td>
-                  <button class="row-edit-btn" type="button" (click)="rowEdit.emit(row)">
-                    Edit
-                  </button>
-                </td>
-              }
-              <td>
-                <input
-                  type="checkbox"
-                  [checked]="isSelected(row[idField()])"
-                  (change)="toggleSelect(row[idField()])"
-                />
-              </td>
-            </tr>
-          }
-        </tbody>
-      </table>
-
-      @if (filteredData().length === 0) {
-        <div class="data-table__empty">No rows match the current filter.</div>
-      }
-    </div>
-  `,
-  styles: [
-    `
-      .data-table {
-        border: 1px solid #30363d;
-        border-radius: 6px;
-        overflow: hidden;
-        font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-        font-size: 13px;
-        background: #0d1117;
-        color: #e6edf3;
-      }
-      .data-table__toolbar {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: 10px 14px;
-        background: #161b22;
-        border-bottom: 1px solid #30363d;
-      }
-      .data-table__title {
-        font-weight: 600;
-      }
-      .data-table__count {
-        color: #8b949e;
-        font-size: 12px;
-      }
-      .data-table__table {
-        width: 100%;
-        border-collapse: collapse;
-      }
-      th {
-        text-align: left;
-        padding: 8px 14px;
-        background: #161b22;
-        border-bottom: 1px solid #30363d;
-        font-weight: 600;
-        color: #8b949e;
-        cursor: pointer;
-        user-select: none;
-      }
-      th:hover {
-        color: #e6edf3;
-      }
-      td {
-        padding: 8px 14px;
-        border-bottom: 1px solid #21262d;
-      }
-      tr:hover {
-        background: rgba(88, 166, 255, 0.05);
-      }
-      tr.selected {
-        background: rgba(88, 166, 255, 0.12);
-      }
-      .data-table__select-col {
-        width: 40px;
-      }
-      .data-table__actions-col {
-        width: 80px;
-      }
-      .row-edit-btn {
-        padding: 3px 10px;
-        background: #161b22;
-        border: 1px solid #30363d;
-        border-radius: 4px;
-        color: #58a6ff;
-        font-size: 12px;
-        cursor: pointer;
-      }
-      .row-edit-btn:hover {
-        background: #1c2530;
-      }
-      .data-table__empty {
-        padding: 24px;
-        text-align: center;
-        color: #8b949e;
-      }
-    `,
-  ],
+  templateUrl: './data-table.component.html',
+  styleUrl: './data-table.component.scss',
 })
 export class DataTableComponent {
   // ---- Inputs ----

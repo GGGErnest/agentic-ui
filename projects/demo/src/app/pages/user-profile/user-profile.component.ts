@@ -1,8 +1,8 @@
 import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
 import { AgenticDirective, AgentAction, AgenticComponent, AGENTIC_COMPONENT } from 'agentic-ui';
-import { ProfileIdentity } from './profile-identity/profile-identity';
-import { ProfilePreferences } from './profile-preferences/profile-preferences';
-import { ProfileActivity } from './profile-activity/profile-activity';
+import { ProfileIdentity } from './profile-identity/profile-identity.component';
+import { ProfilePreferences } from './profile-preferences/profile-preferences.component';
+import { ProfileActivity } from './profile-activity/profile-activity.component';
 
 export type ProfileTab = 'identity' | 'preferences' | 'activity';
 
@@ -11,47 +11,8 @@ export type ProfileTab = 'identity' | 'preferences' | 'activity';
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [AgenticDirective, ProfileIdentity, ProfilePreferences, ProfileActivity],
   providers: [{ provide: AGENTIC_COMPONENT, useExisting: UserProfile }],
-  templateUrl: './user-profile.html',
-  styles: [
-    `
-      :host {
-        display: block;
-        padding: 24px;
-        max-width: 800px;
-        margin: 0 auto;
-      }
-
-      .profile-tabs {
-        display: flex;
-        flex-direction: row;
-        border-bottom: 1px solid #30363d;
-        margin-bottom: 24px;
-      }
-
-      .tab-btn {
-        padding: 10px 20px;
-        background: none;
-        border: none;
-        color: #8b949e;
-        font-size: 14px;
-        cursor: pointer;
-      }
-
-      .tab-btn:hover {
-        color: #e6edf3;
-      }
-
-      .tab-btn:focus-visible {
-        outline: 2px solid #58a6ff;
-        outline-offset: -2px;
-      }
-
-      .tab-btn.active {
-        color: #e6edf3;
-        border-bottom: 2px solid #58a6ff;
-      }
-    `,
-  ],
+  templateUrl: './user-profile.component.html',
+  styleUrl: './user-profile.component.scss',
 })
 export class UserProfile implements AgenticComponent {
   readonly agenticId = 'user-profile';

@@ -1,0 +1,129 @@
+.approval-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 150ms ease;
+}
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.approval-dialog {
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 12px;
+  width: 420px;
+  max-width: 90vw;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  animation: slideUp 200ms ease;
+}
+@keyframes slideUp {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.approval-dialog__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 20px;
+  border-bottom: 1px solid #30363d;
+}
+.approval-dialog__icon {
+  font-size: 18px;
+}
+.approval-dialog__title {
+  font-size: 16px;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.approval-dialog__body {
+  padding: 16px 20px;
+}
+.approval-dialog__intro {
+  margin: 0 0 12px 0;
+  font-size: 13px;
+  color: #8b949e;
+}
+.approval-dialog__detail {
+  background: #0d1117;
+  border: 1px solid #21262d;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.approval-dialog__row {
+  display: flex;
+  padding: 10px 14px;
+  border-bottom: 1px solid #21262d;
+  gap: 12px;
+}
+.approval-dialog__row:last-child {
+  border-bottom: none;
+}
+.approval-dialog__row .label {
+  color: #8b949e;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  min-width: 80px;
+  flex-shrink: 0;
+}
+.approval-dialog__row .value {
+  font-size: 13px;
+  color: #e6edf3;
+  word-break: break-word;
+}
+.approval-dialog__row code.value {
+  font-family: 'SF Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: #79c0ff;
+  background: none;
+}
+
+.approval-dialog__actions {
+  display: flex;
+  gap: 8px;
+  padding: 12px 20px 16px;
+}
+.approval-dialog__btn {
+  flex: 1;
+  padding: 10px 16px;
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms;
+}
+.approval-dialog__btn.approve {
+  background: #238636;
+  color: #fff;
+  border-color: #238636;
+}
+.approval-dialog__btn.approve:hover {
+  background: #2ea043;
+}
+.approval-dialog__btn.reject {
+  background: #21262d;
+  color: #e6edf3;
+}
+.approval-dialog__btn.reject:hover {
+  background: #30363d;
+}

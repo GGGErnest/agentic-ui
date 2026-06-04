@@ -15,72 +15,8 @@ export interface TaskFormValue {
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [AgenticDirective, FormsModule],
   providers: [{ provide: AGENTIC_COMPONENT, useExisting: TaskFormModalComponent }],
-  templateUrl: './task-form-modal.html',
-  styles: [
-    `
-      .modal-backdrop {
-        position: fixed;
-        inset: 0;
-        background: rgba(0, 0, 0, 0.6);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 1000;
-      }
-      .modal {
-        background: #161b22;
-        border: 1px solid #30363d;
-        border-radius: 12px;
-        padding: 24px;
-        width: 400px;
-        max-width: 90vw;
-        display: flex;
-        flex-direction: column;
-        gap: 10px;
-      }
-      .modal h2 {
-        font-size: 18px;
-        margin: 0 0 8px;
-      }
-      .modal label {
-        font-size: 12px;
-        color: #8b949e;
-        text-transform: uppercase;
-      }
-      .modal input,
-      .modal select {
-        padding: 8px 10px;
-        background: #0d1117;
-        border: 1px solid #30363d;
-        border-radius: 6px;
-        color: #e6edf3;
-        font-size: 13px;
-      }
-      .modal-actions {
-        display: flex;
-        gap: 10px;
-        justify-content: flex-end;
-        margin-top: 10px;
-      }
-      .btn {
-        padding: 8px 16px;
-        border: 1px solid #30363d;
-        border-radius: 6px;
-        font-size: 13px;
-        cursor: pointer;
-        background: #161b22;
-        color: #e6edf3;
-      }
-      .btn-primary {
-        background: #238636;
-        border-color: #238636;
-        color: #fff;
-      }
-      .btn-secondary {
-        color: #8b949e;
-      }
-    `,
-  ],
+  templateUrl: './task-form-modal.component.html',
+  styleUrl: './task-form-modal.component.scss',
 })
 export class TaskFormModalComponent implements AgenticComponent {
   readonly agenticId = 'task-form-modal';

@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { provideRouter, Router } from '@angular/router';
-import { AppNav } from './app-nav';
+import { AppNav } from './app-nav.component';
 
 describe('AppNav', () => {
   beforeEach(async () => {

@@ -16,12 +16,12 @@ import {
 } from 'agentic-ui';
 
 import { ActivityService } from '../../services/activity.service';
-import { TaskToolbarComponent } from './task-toolbar/task-toolbar';
-import { TaskFilterChipsComponent } from './task-filter-chips/task-filter-chips';
-import { TaskFormModalComponent, TaskFormValue } from './task-form-modal/task-form-modal';
-import { TaskChooserModalComponent } from './task-chooser-modal/task-chooser-modal';
-import { AgentStatusCardComponent } from './agent-status-card/agent-status-card';
-import { AgentResolutionCardComponent } from './agent-resolution-card/agent-resolution-card';
+import { TaskToolbarComponent } from './task-toolbar/task-toolbar.component';
+import { TaskFilterChipsComponent } from './task-filter-chips/task-filter-chips.component';
+import { TaskFormModalComponent, TaskFormValue } from './task-form-modal/task-form-modal.component';
+import { TaskChooserModalComponent } from './task-chooser-modal/task-chooser-modal.component';
+import { AgentStatusCardComponent } from './agent-status-card/agent-status-card.component';
+import { AgentResolutionCardComponent } from './agent-resolution-card/agent-resolution-card.component';
 
 interface Task {
   [key: string]: unknown;
@@ -52,8 +52,8 @@ interface PendingMatchRequest {
     TaskFormModalComponent,
     TaskChooserModalComponent,
   ],
-  templateUrl: './crud-demo.html',
-  styleUrls: ['./crud-demo.scss'],
+  templateUrl: './crud-demo.component.html',
+  styleUrl: './crud-demo.component.scss',
 })
 export class CrudDemo {
   // ---- Injections ----

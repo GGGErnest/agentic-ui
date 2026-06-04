@@ -23,95 +23,9 @@ const DEFAULT_PREFS: UserPreferences = {
   selector: 'app-profile-preferences',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [FormsModule],
-  templateUrl: './profile-preferences.html',
+  templateUrl: './profile-preferences.component.html',
   providers: [{ provide: AGENTIC_COMPONENT, useExisting: ProfilePreferences }],
-  styles: [
-    `
-      .preferences-card {
-        background: #161b22;
-        border: 1px solid #30363d;
-        border-radius: 12px;
-        padding: 24px;
-      }
-      .section-heading {
-        margin: 0 0 20px;
-        font-size: 18px;
-        font-weight: 600;
-        color: #e6edf3;
-      }
-      .pref-row {
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        margin-bottom: 16px;
-        padding-bottom: 16px;
-        border-bottom: 1px solid #30363d;
-      }
-      .pref-row:last-child {
-        border-bottom: none;
-        margin-bottom: 0;
-        padding-bottom: 0;
-      }
-      .pref-label {
-        font-size: 14px;
-        font-weight: 500;
-        color: #e6edf3;
-      }
-      .pref-description {
-        font-size: 12px;
-        color: #8b949e;
-        margin-top: 2px;
-      }
-      .toggle {
-        position: relative;
-        width: 36px;
-        height: 20px;
-      }
-      .toggle input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-      }
-      .slider {
-        position: absolute;
-        inset: 0;
-        background: #30363d;
-        border-radius: 20px;
-        cursor: pointer;
-        transition: 0.2s;
-      }
-      .slider::before {
-        content: '';
-        position: absolute;
-        width: 14px;
-        height: 14px;
-        left: 3px;
-        bottom: 3px;
-        background: white;
-        border-radius: 50%;
-        transition: 0.2s;
-      }
-      input:checked + .slider {
-        background: #238636;
-      }
-      input:checked + .slider::before {
-        transform: translateX(16px);
-      }
-      select {
-        padding: 6px 10px;
-        background: #0d1117;
-        border: 1px solid #30363d;
-        border-radius: 6px;
-        color: #e6edf3;
-        font-size: 13px;
-        cursor: pointer;
-      }
-      select option {
-        background: #161b22;
-        color: #e6edf3;
-      }
-    `,
-  ],
+  styleUrl: './profile-preferences.component.scss',
 })
 export class ProfilePreferences implements AgenticComponent {
   readonly agenticId = 'profile-preferences';

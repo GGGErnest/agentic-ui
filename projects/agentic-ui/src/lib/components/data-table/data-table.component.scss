@@ -1,0 +1,74 @@
+.data-table {
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 13px;
+  background: #0d1117;
+  color: #e6edf3;
+}
+.data-table__toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+}
+.data-table__title {
+  font-weight: 600;
+}
+.data-table__count {
+  color: #8b949e;
+  font-size: 12px;
+}
+.data-table__table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th {
+  text-align: left;
+  padding: 8px 14px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  font-weight: 600;
+  color: #8b949e;
+  cursor: pointer;
+  user-select: none;
+}
+th:hover {
+  color: #e6edf3;
+}
+td {
+  padding: 8px 14px;
+  border-bottom: 1px solid #21262d;
+}
+tr:hover {
+  background: rgba(88, 166, 255, 0.05);
+}
+tr.selected {
+  background: rgba(88, 166, 255, 0.12);
+}
+.data-table__select-col {
+  width: 40px;
+}
+.data-table__actions-col {
+  width: 80px;
+}
+.row-edit-btn {
+  padding: 3px 10px;
+  background: #161b22;
+  border: 1px solid #30363d;
+  border-radius: 4px;
+  color: #58a6ff;
+  font-size: 12px;
+  cursor: pointer;
+}
+.row-edit-btn:hover {
+  background: #1c2530;
+}
+.data-table__empty {
+  padding: 24px;
+  text-align: center;
+  color: #8b949e;
+}

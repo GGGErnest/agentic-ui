@@ -1,0 +1,15 @@
+@if (rect(); as r) {
+  <div
+    class="telemetry-frame"
+    [style.left.px]="r.left"
+    [style.top.px]="r.top"
+    [style.width.px]="r.width"
+    [style.height.px]="r.height"
+    [class.telemetry-frame--live]="!shadowActive()"
+    [class.telemetry-frame--shadow]="shadowActive()"
+  >
+    <div class="telemetry-label">
+      {{ focusedId() }}
+    </div>
+  </div>
+}

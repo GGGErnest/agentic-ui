@@ -1,0 +1,38 @@
+@if (isVisible()) {
+  <div class="approval-backdrop" (click)="onBackdropClick()">
+    <div class="approval-dialog" (click)="$event.stopPropagation()">
+      <div class="approval-dialog__header">
+        <span class="approval-dialog__icon">⚠️</span>
+        <span class="approval-dialog__title">Approval Required</span>
+      </div>
+
+      <div class="approval-dialog__body">
+        <p class="approval-dialog__intro">Agent wants to execute a destructive action:</p>
+
+        @if (ticket(); as t) {
+          <div class="approval-dialog__detail">
+            <div class="approval-dialog__row">
+              <span class="label">Component</span>
+              <span class="value">{{ t.entryRole }}</span>
+            </div>
+            <div class="approval-dialog__row">
+              <span class="label">Action</span>
+              <span class="value">{{ t.actionDescription }}</span>
+            </div>
+            @if (t.params && paramKeys(t.params).length > 0) {
+              <div class="approval-dialog__row">
+                <span class="label">Parameters</span>
+                <code class="value">{{ formatParams(t.params) }}</code>
+              </div>
+            }
+          </div>
+        }
+      </div>
+
+      <div class="approval-dialog__actions">
+        <button class="approval-dialog__btn approve" (click)="approve()">✅ Approve</button>
+        <button class="approval-dialog__btn reject" (click)="reject()">❌ Reject</button>
+      </div>
+    </div>
+  </div>
+}

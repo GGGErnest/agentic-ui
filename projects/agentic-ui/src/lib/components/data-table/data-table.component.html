@@ -1,0 +1,52 @@
+<div class="data-table" agentic [agenticId]="agenticId()">
+  <div class="data-table__toolbar">
+    <span class="data-table__title">{{ title() }}</span>
+    <span class="data-table__count">{{ filteredData().length }} / {{ totalRows() }} rows</span>
+  </div>
+
+  <table class="data-table__table">
+    <thead>
+      <tr>
+        @for (col of columns(); track col) {
+          <th (click)="toggleSort(col)">
+            {{ col }}
+            @if (sortColumn() === col) {
+              <span>{{ sortDirection() === 'asc' ? '▲' : '▼' }}</span>
+            }
+          </th>
+        }
+        @if (showEditButton()) {
+          <th class="data-table__actions-col">Actions</th>
+        }
+        <th class="data-table__select-col">#</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (row of filteredData(); track row[idField()]) {
+        <tr [class.selected]="isSelected(row[idField()])">
+          @for (col of columns(); track col) {
+            <td>{{ row[col] }}</td>
+          }
+          @if (showEditButton()) {
+            <td>
+              <button class="row-edit-btn" type="button" (click)="rowEdit.emit(row)">
+                Edit
+              </button>
+            </td>
+          }
+          <td>
+            <input
+              type="checkbox"
+              [checked]="isSelected(row[idField()])"
+              (change)="toggleSelect(row[idField()])"
+            />
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+
+  @if (filteredData().length === 0) {
+    <div class="data-table__empty">No rows match the current filter.</div>
+  }
+</div>

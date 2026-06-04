@@ -6,33 +6,8 @@ import { AgenticDirective, AgentAction } from 'agentic-ui';
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [AgenticDirective],
-  templateUrl: './task-filter-chips.html',
-  styles: [
-    `
-      .demo-filters {
-        display: flex;
-        gap: 8px;
-        margin-bottom: 16px;
-      }
-      .chip {
-        padding: 4px 12px;
-        border: 1px solid #30363d;
-        border-radius: 20px;
-        font-size: 12px;
-        cursor: pointer;
-        background: #161b22;
-        color: #8b949e;
-      }
-      .chip:hover {
-        color: #e6edf3;
-      }
-      .chip--active {
-        background: #1f6feb;
-        border-color: #1f6feb;
-        color: #fff;
-      }
-    `,
-  ],
+  templateUrl: './task-filter-chips.component.html',
+  styleUrl: './task-filter-chips.component.scss',
 })
 export class TaskFilterChipsComponent {
   readonly activeFilter = input<string | null>(null);

@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { AgentWorldService } from 'agentic-ui';
 import { ActivityService } from '../../services/activity.service';
 
-import { CrudDemo } from './crud-demo';
+import { CrudDemo } from './crud-demo.component';
 
 describe('CrudDemo', () => {
   let component: CrudDemo;

@@ -1,0 +1,46 @@
+.demo-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.demo-stats {
+  margin-left: auto;
+  color: #8b949e;
+  font-size: 13px;
+}
+.btn {
+  padding: 8px 16px;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  background: #161b22;
+  color: #e6edf3;
+}
+.btn:hover {
+  background: #1c2530;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: #238636;
+  border-color: #238636;
+  color: #fff;
+}
+.btn-primary:hover {
+  background: #2ea043;
+}
+.btn-danger {
+  color: #f85149;
+}
+.btn-danger:hover {
+  background: #490202;
+  border-color: #f85149;
+}
+.btn-secondary {
+  color: #8b949e;
+}

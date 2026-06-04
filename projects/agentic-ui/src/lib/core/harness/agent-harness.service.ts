@@ -3,6 +3,14 @@ import { AgentWorldService } from '../world/agent-world.service';
 import { LLMProvider, LLMMessage, ToolCall, LLMStreamChunk } from './llm-provider.interface';
 import { LLM_PROVIDER } from '../providers/llm-provider.token';
 import { ToolNameCodec } from '../events/tool-name-codec';
+import {
+  AgentEvent,
+  runStarted,
+  runFinished,
+  textMessageStart,
+  textMessageContent,
+  textMessageEnd,
+} from '../events/agent-event.model';
 
 /** Single step result in the agent's reasoning chain. */
 export interface AgentStep {
@@ -328,6 +336,56 @@ export class AgentHarness {
     } finally {
       this.isRunning.set(false);
     }
+  }
+
+  // ---- AG-UI Event Stream ----
+
+  /**
+   * Run one LLM turn and return the AG-UI-shaped event stream for it.
+   *
+   * Minimum-viable text-only implementation: emits `RUN_STARTED`, streams
+   * `TEXT_MESSAGE_*` events for `content` and `thought` chunks, and emits
+   * `RUN_FINISHED` once the LLM produces no tool calls. Tool-dispatch event
+   * emission is intentionally deferred to Task 1.4.
+   *
+   * @returns A flat array of emitted events. The first event is `RUN_STARTED`
+   *          and, for a text-only run, the last is `RUN_FINISHED`.
+   */
+  async runWithEvents(userPrompt: string): Promise<AgentEvent[]> {
+    const events: AgentEvent[] = [];
+    const threadId = crypto.randomUUID();
+    const runId = crypto.randomUUID();
+
+    events.push(runStarted({ threadId, runId }));
+
+    const snapshot = this.world.snapshot();
+    const stream = this.llm.getStream(this.messages, snapshot.tools, this.systemPrompt, undefined);
+
+    const textDeltas: string[] = [];
+    const toolCalls: ToolCall[] = [];
+
+    for await (const chunk of stream) {
+      if ((chunk.type === 'content' || chunk.type === 'thought') && chunk.text) {
+        textDeltas.push(chunk.text);
+      } else if (chunk.type === 'tool_call' && chunk.data) {
+        toolCalls.push(chunk.data);
+      }
+    }
+
+    if (textDeltas.length > 0) {
+      const messageId = crypto.randomUUID();
+      events.push(textMessageStart({ messageId, role: 'assistant' }));
+      for (const delta of textDeltas) {
+        events.push(textMessageContent({ messageId, delta }));
+      }
+      events.push(textMessageEnd({ messageId }));
+    }
+
+    if (toolCalls.length === 0) {
+      events.push(runFinished({ threadId, runId, outcome: 'success' }));
+    }
+
+    return events;
   }
 
   // ---- Stability (with timeout) ----

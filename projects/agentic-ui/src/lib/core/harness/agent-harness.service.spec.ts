@@ -13,6 +13,7 @@ import { LLM_PROVIDER } from '../providers/llm-provider.token';
 import { AgentAction, AgentActionResult } from '../world/agent-action.model';
 import { WorldSnapshot } from '../world/world-entry.interface';
 import { AgentApprovalService } from '../approval/agent-approval.service';
+import { AgentEvent } from '../events/agent-event.model';
 
 // ---- Helpers ----
 
@@ -175,6 +176,28 @@ describe('AgentHarness', () => {
       expect(steps[0].thought).toContain('Everything looks fine');
       expect(steps[0].action).toBeNull();
       expect(steps[0].result).toContain('No action taken');
+    });
+  });
+
+  // ========== Event Emission ==========
+
+  describe('event emission', () => {
+    it('emits RUN_STARTED + text events + RUN_FINISHED for text-only run', async () => {
+      vi.mocked(mockLLM.getStream).mockReturnValue(
+        new AsyncIterableChunks([
+          { type: 'content', text: 'Hello ' },
+          { type: 'content', text: 'world' },
+        ]),
+      );
+
+      const events = await harness.runWithEvents('Greet me');
+
+      const types = events.map((e) => e.type);
+      expect(types[0]).toBe('RUN_STARTED');
+      expect(types).toContain('TEXT_MESSAGE_START');
+      expect(types).toContain('TEXT_MESSAGE_CONTENT');
+      expect(types).toContain('TEXT_MESSAGE_END');
+      expect(types[types.length - 1]).toBe('RUN_FINISHED');
     });
   });
 

@@ -307,6 +307,32 @@ describe('AgentHarness', () => {
       expect(events.at(-1)?.type).toBe('RUN_FINISHED');
       expect((events.at(-1) as { outcome?: string } | undefined)?.outcome).toBe('error');
     });
+
+    it('emits a RUN_ERROR event when the LLM stream throws', async () => {
+      const erroringStream = {
+        [Symbol.asyncIterator]() {
+          return {
+            next() {
+              return Promise.reject(new Error('boom'));
+            },
+            return() {
+              return Promise.resolve({ done: true, value: undefined });
+            },
+          };
+        },
+      };
+      vi.mocked(mockLLM.getStream).mockReturnValueOnce(
+        erroringStream as unknown as AsyncIterable<LLMStreamChunk>,
+      );
+
+      const events = await harness.runWithEvents('hi');
+
+      const runErrors = events.filter((e) => e.type === 'RUN_ERROR');
+      expect(runErrors).toHaveLength(1);
+      expect((runErrors[0] as { message?: string }).message).toBe('boom');
+      expect(events.at(-1)?.type).toBe('RUN_FINISHED');
+      expect((events.at(-1) as { outcome?: string } | undefined)?.outcome).toBe('error');
+    });
   });
 
   // ========== chatTurns ==========

@@ -7,6 +7,7 @@ import {
   AgentEvent,
   runStarted,
   runFinished,
+  runError,
   stepStarted,
   stepFinished,
   textMessageStart,
@@ -430,8 +431,10 @@ export class AgentHarness {
       }
 
       events.push(runFinished({ threadId, runId, outcome: 'success' }));
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
       events.push(stepFinished({ stepName }));
+      events.push(runError({ threadId, runId, message }));
       events.push(runFinished({ threadId, runId, outcome: 'error' }));
     }
 

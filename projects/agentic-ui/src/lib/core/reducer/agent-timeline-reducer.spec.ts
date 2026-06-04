@@ -93,6 +93,19 @@ describe('reduceAgentTimeline', () => {
     s = reduceAgentTimeline(s, textMessageStart({ messageId: 'm1', role: 'assistant' }));
     s = reduceAgentTimeline(s, textMessageContent({ messageId: 'm1', delta: 'hi' }));
     s = reduceAgentTimeline(s, textMessageEnd({ messageId: 'm1' }));
-    expect(s.timeline).toEqual([{ kind: 'message', id: 'm1' }]);
+    s = reduceAgentTimeline(s, toolCallStart({ toolCallId: 'c1', toolCallName: 'fn' }));
+    s = reduceAgentTimeline(
+      s,
+      toolCallResult({ toolCallId: 'c1', content: 'ok', role: 'tool' }),
+    );
+    expect(s.timeline).toEqual([
+      { kind: 'message', id: 'm1' },
+      { kind: 'tool', id: 'c1' },
+    ]);
+    s = reduceAgentTimeline(
+      s,
+      toolCallResult({ toolCallId: 'c1', content: 'ok', role: 'tool' }),
+    );
+    expect(s.timeline).toHaveLength(2);
   });
 });

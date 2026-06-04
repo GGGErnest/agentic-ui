@@ -347,13 +347,14 @@ export class AgentHarness {
   /**
    * Run one LLM turn and return the AG-UI-shaped event stream for it.
    *
-   * Minimum-viable text-only implementation: emits `RUN_STARTED`, streams
-   * `TEXT_MESSAGE_*` events for `content` and `thought` chunks, and emits
-   * `RUN_FINISHED` once the LLM produces no tool calls. Tool-dispatch event
-   * emission is intentionally deferred to Task 1.4.
+   * One-shot implementation (no ReAct loop yet): emits `RUN_STARTED`, streams
+   * `TEXT_MESSAGE_*` events for `content` and `thought` chunks, and for each
+   * tool call emits the `TOOL_CALL_*` quartet (`START`, `ARGS`, `END`,
+   * `RESULT`) with the action executed against the world. Always terminates
+   * with `RUN_FINISHED` (outcome `success` on completion, `error` on throw).
    *
    * @returns A flat array of emitted events. The first event is `RUN_STARTED`
-   *          and, for a text-only run, the last is `RUN_FINISHED`.
+   *          and the last is always `RUN_FINISHED`.
    */
   async runWithEvents(userPrompt: string): Promise<AgentEvent[]> {
     const events: AgentEvent[] = [];

@@ -239,20 +239,15 @@ describe('AgentHarness', () => {
         ],
       });
 
-      vi.mocked(mockLLM.getStream)
-        .mockImplementationOnce(
-          () =>
-            new AsyncIterableChunks([
-              { type: 'thought', text: 'Deleting' },
-              {
-                type: 'tool_call',
-                data: { id: 'c1', function: { name: 'tbl__action__del', arguments: '{}' } },
-              },
-            ]),
-        )
-        .mockImplementation(
-          () => new AsyncIterableChunks([{ type: 'thought', text: 'done' }]),
-        );
+      vi.mocked(mockLLM.getStream).mockReturnValueOnce(
+        new AsyncIterableChunks([
+          { type: 'thought', text: 'Deleting' },
+          {
+            type: 'tool_call',
+            data: { id: 'c1', function: { name: 'tbl__action__del', arguments: '{}' } },
+          },
+        ]),
+      );
 
       const events = await harness.runWithEvents('delete something');
 
@@ -263,6 +258,8 @@ describe('AgentHarness', () => {
         'TOOL_CALL_END',
         'TOOL_CALL_RESULT',
       ]);
+      expect(events.at(-1)?.type).toBe('RUN_FINISHED');
+      expect((events.at(-1) as { outcome?: string } | undefined)?.outcome).toBe('success');
     });
   });
 

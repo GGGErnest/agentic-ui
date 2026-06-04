@@ -230,11 +230,15 @@ export function messagesSnapshot(input: {
 
 // ---- Guards ----
 
-export function isRunTerminal(event: AgentEvent): boolean {
+export function isRunTerminal(
+  event: AgentEvent,
+): event is RunFinishedEvent | RunErrorEvent {
   return event.type === 'RUN_FINISHED' || event.type === 'RUN_ERROR';
 }
 
-export function isTextEvent(event: AgentEvent): boolean {
+export function isTextEvent(
+  event: AgentEvent,
+): event is TextMessageStartEvent | TextMessageContentEvent | TextMessageEndEvent {
   return (
     event.type === 'TEXT_MESSAGE_START' ||
     event.type === 'TEXT_MESSAGE_CONTENT' ||
@@ -242,7 +246,9 @@ export function isTextEvent(event: AgentEvent): boolean {
   );
 }
 
-export function isToolEvent(event: AgentEvent): boolean {
+export function isToolEvent(
+  event: AgentEvent,
+): event is ToolCallStartEvent | ToolCallArgsEvent | ToolCallEndEvent | ToolCallResultEvent {
   return (
     event.type === 'TOOL_CALL_START' ||
     event.type === 'TOOL_CALL_ARGS' ||

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  AgentEvent,
   runStarted,
   runFinished,
   runError,
@@ -107,5 +108,26 @@ describe('agent-event guards', () => {
     expect(isToolEvent(toolCallStart({ toolCallId: 'c', toolCallName: 'x' }))).toBe(true);
     expect(isToolEvent(toolCallResult({ toolCallId: 'c', content: 'x', role: 'tool' }))).toBe(true);
     expect(isToolEvent(textMessageStart({ messageId: 'm', role: 'assistant' }))).toBe(false);
+  });
+
+  it('guards narrow the union (compile-time check)', () => {
+    const e: AgentEvent = textMessageContent({ messageId: 'm', delta: 'x' });
+    if (isTextEvent(e)) {
+      expect(e.messageId).toBe('m');
+    } else {
+      throw new Error('expected text event');
+    }
+    const e2: AgentEvent = toolCallResult({ toolCallId: 'c', content: 'x', role: 'tool' });
+    if (isToolEvent(e2)) {
+      expect(e2.content).toBe('x');
+    } else {
+      throw new Error('expected tool event');
+    }
+    const e3: AgentEvent = runFinished({ threadId: 't', runId: 'r', outcome: 'success' });
+    if (isRunTerminal(e3)) {
+      expect(e3.runId).toBe('r');
+    } else {
+      throw new Error('expected terminal event');
+    }
   });
 });

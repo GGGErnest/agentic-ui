@@ -365,8 +365,8 @@ export class AgentHarness {
 
     events.push(runStarted({ threadId, runId }));
 
+    const stepName = 'reasoning';
     try {
-      const stepName = 'reasoning';
       events.push(stepStarted({ stepName }));
 
       const snapshot = this.world.snapshot();
@@ -431,6 +431,7 @@ export class AgentHarness {
 
       events.push(runFinished({ threadId, runId, outcome: 'success' }));
     } catch {
+      events.push(stepFinished({ stepName }));
       events.push(runFinished({ threadId, runId, outcome: 'error' }));
     }
 

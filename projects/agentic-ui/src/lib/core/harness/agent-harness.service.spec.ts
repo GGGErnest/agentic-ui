@@ -274,6 +274,38 @@ describe('AgentHarness', () => {
       expect(stepStarts).toHaveLength(1);
       expect(stepEnds).toHaveLength(1);
       expect(stepStarts[0].stepName).toBe(stepEnds[0].stepName);
+
+      const startIdx = events.indexOf(stepStarts[0]);
+      const endIdx = events.indexOf(stepEnds[0]);
+      expect(startIdx).toBeLessThan(endIdx);
+    });
+
+    it('still closes the step bracket when the LLM stream throws', async () => {
+      const erroringStream = {
+        [Symbol.asyncIterator]() {
+          return {
+            next() {
+              return Promise.reject(new Error('boom'));
+            },
+            return() {
+              return Promise.resolve({ done: true, value: undefined });
+            },
+          };
+        },
+      };
+      vi.mocked(mockLLM.getStream).mockReturnValueOnce(
+        erroringStream as unknown as AsyncIterable<LLMStreamChunk>,
+      );
+
+      const events = await harness.runWithEvents('hi');
+
+      const stepStarts = events.filter((e) => e.type === 'STEP_STARTED');
+      const stepEnds = events.filter((e) => e.type === 'STEP_FINISHED');
+      expect(stepStarts).toHaveLength(1);
+      expect(stepEnds).toHaveLength(1);
+      expect(stepStarts[0].stepName).toBe(stepEnds[0].stepName);
+      expect(events.at(-1)?.type).toBe('RUN_FINISHED');
+      expect((events.at(-1) as { outcome?: string } | undefined)?.outcome).toBe('error');
     });
   });
 

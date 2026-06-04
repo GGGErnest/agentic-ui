@@ -54,6 +54,9 @@ export type {
   ToolCall,
 } from './lib/core/harness/llm-provider.interface';
 
+// Core — Events
+export * from './lib/core/events';
+
 // Core — Approval Gate
 export { AgentApprovalService } from './lib/core/approval/agent-approval.service';
 export type { ApprovalTicket } from './lib/core/approval/agent-approval.service';

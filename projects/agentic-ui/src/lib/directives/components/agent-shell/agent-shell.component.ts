@@ -1,15 +1,15 @@
 import {
-  Component,
-  inject,
-  signal,
-  computed,
-  effect,
-  ViewChild,
-  ElementRef,
-  OnInit,
-  OnDestroy,
+  afterNextRender,
   ChangeDetectionStrategy,
+  Component,
+  computed,
+  DestroyRef,
+  effect,
+  ElementRef,
+  inject,
   isDevMode,
+  signal,
+  viewChild,
 } from '@angular/core';
 
 declare global {
@@ -17,7 +17,6 @@ declare global {
     Agent?: Record<string, () => unknown>;
   }
 }
-import { CommonModule } from '@angular/common';
 import { AgentHarness } from '../../../core/harness/agent-harness.service';
 import { AgentWorldService } from '../../../core/world/agent-world.service';
 import { AgentApprovalDialogComponent } from '../../../components/approval-dialog/agent-approval-dialog.component';
@@ -37,16 +36,17 @@ import { TelemetryOverlayComponent } from '../telemetry-overlay/telemetry-overla
 @Component({
   selector: 'agui-agent-shell',
   standalone: true,
-  imports: [CommonModule, AgentApprovalDialogComponent, TelemetryOverlayComponent],
+  imports: [AgentApprovalDialogComponent, TelemetryOverlayComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './agent-shell.component.html',
   styleUrl: './agent-shell.component.scss',
 })
-export class AgentShellComponent implements OnInit, OnDestroy {
+export class AgentShellComponent {
   readonly harness = inject(AgentHarness);
   readonly world = inject(AgentWorldService);
+  private readonly destroyRef = inject(DestroyRef);
 
-  @ViewChild('stepsContainer') private stepsContainer?: ElementRef<HTMLElement>;
+  private readonly stepsContainer = viewChild<ElementRef<HTMLElement>>('stepsContainer');
 
   userInput = signal<string>('');
   isExpanded = signal<boolean>(false);
@@ -83,31 +83,32 @@ export class AgentShellComponent implements OnInit, OnDestroy {
       this.harness.thought();
       this.scrollToBottom();
     });
+
+    // Dev-only: expose window.Agent debugger after first render.
+    afterNextRender(() => {
+      if (isDevMode() && typeof (globalThis as { vi?: unknown }).vi === 'undefined') {
+        window.Agent = {
+          snapshot: () => this.world.snapshot(),
+          world: () => this.world.entries(),
+          visible: () => this.world.activeEntries(),
+          messages: () => this.harness.exportConversation().messages,
+          system: () => this.harness.exportConversation().systemPrompt,
+          steps: () => this.harness.steps(),
+          status: () => ({
+            isRunning: this.harness.isRunning(),
+            isStable: this.world.isStable(),
+            shadowMode: this.world.shadowMode(),
+            focusedEntryId: this.world.focusedEntryId(),
+            visibleCount: this.world.activeEntries().size,
+          }),
+        };
+      }
+    });
   }
 
-  ngOnInit(): void {
-    if (isDevMode() && typeof (globalThis as { vi?: unknown }).vi === 'undefined') {
-      window.Agent = {
-        snapshot: () => this.world.snapshot(),
-        world: () => this.world.entries(),
-        visible: () => this.world.activeEntries(),
-        messages: () => this.harness.exportConversation().messages,
-        system: () => this.harness.exportConversation().systemPrompt,
-        steps: () => this.harness.steps(),
-        status: () => ({
-          isRunning: this.harness.isRunning(),
-          isStable: this.world.isStable(),
-          shadowMode: this.world.shadowMode(),
-          focusedEntryId: this.world.focusedEntryId(),
-          visibleCount: this.world.activeEntries().size,
-        }),
-      };
-    }
-  }
-
-  ngOnDestroy(): void {
+  private readonly destroyEffect = this.destroyRef.onDestroy(() => {
     delete window.Agent;
-  }
+  });
 
   get label(): string {
     if (this.harness.isRunning()) return 'Agent is thinking...';
@@ -140,8 +141,9 @@ export class AgentShellComponent implements OnInit, OnDestroy {
 
   private scrollToBottom(): void {
     setTimeout(() => {
-      if (this.stepsContainer) {
-        const el = this.stepsContainer.nativeElement;
+      const ref = this.stepsContainer();
+      if (ref) {
+        const el = ref.nativeElement;
         el.scrollTop = el.scrollHeight;
       }
     }, 50);

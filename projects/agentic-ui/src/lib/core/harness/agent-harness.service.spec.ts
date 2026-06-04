@@ -261,6 +261,20 @@ describe('AgentHarness', () => {
       expect(events.at(-1)?.type).toBe('RUN_FINISHED');
       expect((events.at(-1) as { outcome?: string } | undefined)?.outcome).toBe('success');
     });
+
+    it('wraps the LLM invocation in a STEP_STARTED/STEP_FINISHED pair', async () => {
+      vi.mocked(mockLLM.getStream).mockReturnValueOnce(
+        new AsyncIterableChunks([{ type: 'content', text: 'done' }]),
+      );
+
+      const events = await harness.runWithEvents('hi');
+
+      const stepStarts = events.filter((e) => e.type === 'STEP_STARTED');
+      const stepEnds = events.filter((e) => e.type === 'STEP_FINISHED');
+      expect(stepStarts).toHaveLength(1);
+      expect(stepEnds).toHaveLength(1);
+      expect(stepStarts[0].stepName).toBe(stepEnds[0].stepName);
+    });
   });
 
   // ========== chatTurns ==========

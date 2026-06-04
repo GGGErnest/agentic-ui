@@ -7,6 +7,8 @@ import {
   AgentEvent,
   runStarted,
   runFinished,
+  stepStarted,
+  stepFinished,
   textMessageStart,
   textMessageContent,
   textMessageEnd,
@@ -364,6 +366,9 @@ export class AgentHarness {
     events.push(runStarted({ threadId, runId }));
 
     try {
+      const stepName = 'reasoning';
+      events.push(stepStarted({ stepName }));
+
       const snapshot = this.world.snapshot();
       const stream = this.llm.getStream(this.messages, snapshot.tools, this.systemPrompt, undefined);
 
@@ -377,6 +382,8 @@ export class AgentHarness {
           toolCalls.push(chunk.data);
         }
       }
+
+      events.push(stepFinished({ stepName }));
 
       if (textDeltas.length > 0) {
         const messageId = crypto.randomUUID();

@@ -1,7 +1,5 @@
 import { Injectable, signal, computed, ApplicationRef, inject, DestroyRef, afterEveryRender } from '@angular/core';
-import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { BehaviorSubject, firstValueFrom, Subject } from 'rxjs';
-import { filter } from 'rxjs/operators';
+import { firstValueFrom, Subject } from 'rxjs';
 import { AgentApprovalService } from '../approval/agent-approval.service';
 import { ActionParameter, AgentActionResult, AgentAction } from './agent-action.model';
 import { SnapshotConfig, ToolDefinition, WorldEntry, WorldSnapshot } from './world-entry.interface';

@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { runStarted, ToolNameCodec, type AgentRunInput } from './';
 
 describe('events module barrel', () => {

@@ -1,4 +1,4 @@
-import { Injectable, Type } from '@angular/core';
+import { Injectable, Type, signal } from '@angular/core';
 
 export interface ComponentMetadata {
   [key: string]: unknown;
@@ -15,7 +15,10 @@ export interface ComponentEntry {
  */
 @Injectable({ providedIn: 'root' })
 export class ComponentRegistry {
-  private registry = new Map<string, ComponentEntry>();
+  private readonly registry = signal(new Map<string, ComponentEntry>());
+
+  /** Readonly signal exposing the current registry entries. */
+  readonly entries = this.registry.asReadonly();
 
   /**
    * Register a component by id.
@@ -30,7 +33,11 @@ export class ComponentRegistry {
     if (!component) {
       throw new Error('Component must be defined');
     }
-    this.registry.set(id, { component, metadata });
+    this.registry.update((m) => {
+      const next = new Map(m);
+      next.set(id, { component, metadata });
+      return next;
+    });
   }
 
   /**
@@ -39,7 +46,7 @@ export class ComponentRegistry {
    * @returns Component class or null
    */
   get(id: string): Type<unknown> | null {
-    const entry = this.registry.get(id);
+    const entry = this.registry().get(id);
     return entry?.component || null;
   }
 
@@ -49,7 +56,7 @@ export class ComponentRegistry {
    * @returns Metadata object or null
    */
   getMetadata(id: string): ComponentMetadata | null {
-    const entry = this.registry.get(id);
+    const entry = this.registry().get(id);
     return entry?.metadata || null;
   }
 
@@ -58,7 +65,7 @@ export class ComponentRegistry {
    * @returns Array of ids
    */
   list(): string[] {
-    return Array.from(this.registry.keys());
+    return Array.from(this.registry().keys());
   }
 
   /**
@@ -66,13 +73,17 @@ export class ComponentRegistry {
    * @param id Component id
    */
   unregister(id: string): void {
-    this.registry.delete(id);
+    this.registry.update((m) => {
+      const next = new Map(m);
+      next.delete(id);
+      return next;
+    });
   }
 
   /**
    * Clear all registrations.
    */
   clear(): void {
-    this.registry.clear();
+    this.registry.update(() => new Map());
   }
 }

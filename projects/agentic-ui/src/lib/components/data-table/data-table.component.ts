@@ -2,13 +2,10 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
-  EventEmitter,
   input,
-  Output,
   output,
   signal,
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
 import { AgentAction, AgentActionResult } from '../../core/world/agent-action.model';
 import { AGENTIC_COMPONENT } from '../../core/world/agentic-component.token';
 import { AgenticDirective } from '../../directives/agentic.directive';
@@ -34,7 +31,7 @@ import { DataRow, RowQuery, BulkEditOp } from './data-table.models';
   selector: 'agui-data-table',
   standalone: true,
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [CommonModule, AgenticDirective],
+  imports: [AgenticDirective],
   providers: [{ provide: AGENTIC_COMPONENT, useExisting: DataTableComponent }],
   templateUrl: './data-table.component.html',
   styleUrl: './data-table.component.scss',
@@ -66,8 +63,8 @@ export class DataTableComponent {
 
   // ---- Outputs ----
 
-  @Output() readonly selectionChange = new EventEmitter<string[]>();
-  @Output() readonly rowsDeleted = new EventEmitter<string[]>();
+  readonly selectionChange = output<string[]>();
+  readonly rowsDeleted = output<string[]>();
   readonly bulkEdited = output<BulkEditOp>();
   readonly rowEdit = output<DataRow>();
 

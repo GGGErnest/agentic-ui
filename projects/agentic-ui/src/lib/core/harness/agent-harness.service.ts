@@ -10,6 +10,10 @@ import {
   textMessageStart,
   textMessageContent,
   textMessageEnd,
+  toolCallStart,
+  toolCallArgs,
+  toolCallEnd,
+  toolCallResult,
 } from '../events/agent-event.model';
 
 /** Single step result in the agent's reasoning chain. */
@@ -382,9 +386,42 @@ export class AgentHarness {
         events.push(textMessageEnd({ messageId }));
       }
 
-      if (toolCalls.length === 0) {
-        events.push(runFinished({ threadId, runId, outcome: 'success' }));
+      if (toolCalls.length > 0) {
+        for (const toolCall of toolCalls) {
+          events.push(
+            toolCallStart({
+              toolCallId: toolCall.id,
+              toolCallName: toolCall.function.name,
+            }),
+          );
+          events.push(
+            toolCallArgs({
+              toolCallId: toolCall.id,
+              delta: toolCall.function.arguments,
+            }),
+          );
+          events.push(toolCallEnd({ toolCallId: toolCall.id }));
+
+          const { entryId, actionName } = this.codec.decodeAction(toolCall.function.name);
+          let args: Record<string, unknown> = {};
+          try {
+            args = JSON.parse(toolCall.function.arguments);
+          } catch {
+            /* arguments may be malformed */
+          }
+          const result = await this.world.executeAction(entryId, actionName, args);
+
+          events.push(
+            toolCallResult({
+              toolCallId: toolCall.id,
+              content: result.message,
+              role: 'tool',
+            }),
+          );
+        }
       }
+
+      events.push(runFinished({ threadId, runId, outcome: 'success' }));
     } catch {
       events.push(runFinished({ threadId, runId, outcome: 'error' }));
     }

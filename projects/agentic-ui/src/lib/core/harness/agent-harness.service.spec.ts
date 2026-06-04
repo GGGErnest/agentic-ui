@@ -225,6 +225,45 @@ describe('AgentHarness', () => {
       expect(contents.every((c) => c.messageId === start!.messageId)).toBe(true);
       expect(end!.messageId).toBe(start!.messageId);
     });
+
+    it('emits TOOL_CALL_START, TOOL_CALL_ARGS, TOOL_CALL_END, TOOL_CALL_RESULT for tool run', async () => {
+      world.register({
+        id: 'tbl',
+        role: 'DataTable',
+        actions: [
+          {
+            name: 'del',
+            description: 'delete',
+            execute: vi.fn().mockResolvedValue({ success: true, message: 'deleted' }),
+          },
+        ],
+      });
+
+      vi.mocked(mockLLM.getStream)
+        .mockImplementationOnce(
+          () =>
+            new AsyncIterableChunks([
+              { type: 'thought', text: 'Deleting' },
+              {
+                type: 'tool_call',
+                data: { id: 'c1', function: { name: 'tbl__action__del', arguments: '{}' } },
+              },
+            ]),
+        )
+        .mockImplementation(
+          () => new AsyncIterableChunks([{ type: 'thought', text: 'done' }]),
+        );
+
+      const events = await harness.runWithEvents('delete something');
+
+      const toolEvents = events.filter((e) => e.type.startsWith('TOOL_'));
+      expect(toolEvents.map((e) => e.type)).toEqual([
+        'TOOL_CALL_START',
+        'TOOL_CALL_ARGS',
+        'TOOL_CALL_END',
+        'TOOL_CALL_RESULT',
+      ]);
+    });
   });
 
   // ========== chatTurns ==========

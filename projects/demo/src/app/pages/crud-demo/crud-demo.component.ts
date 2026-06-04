@@ -444,11 +444,12 @@ export class CrudDemo {
   }
 
   async showAgentStatusCard(params: unknown): Promise<AgentActionResult> {
-    if (!this.agentZone()) {
+    const zone = this.agentZone();
+    if (!zone) {
       return { success: false, message: 'Agent showcase zone is not available.' };
     }
 
-    this.agentZone()!.render(
+    zone.render(
       'agentStatusCard',
       {
         activeFilter: this.activeFilter(),
@@ -469,11 +470,12 @@ export class CrudDemo {
     if (!request) {
       return { success: false, message: 'No pending match request available.' };
     }
-    if (!this.agentZone()) {
+    const zone = this.agentZone();
+    if (!zone) {
       return { success: false, message: 'Agent showcase zone is not available.' };
     }
 
-    this.agentZone()!.render(
+    zone.render(
       'agentResolutionCard',
       {
         column: request.column,
@@ -488,11 +490,12 @@ export class CrudDemo {
   }
 
   async clearAgentZone(): Promise<AgentActionResult> {
-    if (!this.agentZone()) {
+    const zone = this.agentZone();
+    if (!zone) {
       return { success: true, message: 'Agent showcase zone already clear.' };
     }
 
-    this.agentZone()!.render('agentStatusCard', {}, 'clear');
+    zone.render('agentStatusCard', {}, 'clear');
     return { success: true, message: 'Agent showcase zone cleared.' };
   }
 

@@ -1,4 +1,4 @@
-import { Injectable, Type, signal } from '@angular/core';
+import { Injectable, Signal, Type, signal } from '@angular/core';
 
 export interface ComponentMetadata {
   [key: string]: unknown;
@@ -17,8 +17,8 @@ export interface ComponentEntry {
 export class ComponentRegistry {
   private readonly registry = signal(new Map<string, ComponentEntry>());
 
-  /** Readonly signal exposing the current registry entries. */
-  readonly entries = this.registry.asReadonly();
+  /** Readonly signal exposing a read-only view of the current registry entries. */
+  readonly entries: Signal<ReadonlyMap<string, ComponentEntry>> = this.registry.asReadonly();
 
   /**
    * Register a component by id.

@@ -2,6 +2,7 @@ import { Injectable, signal, inject } from '@angular/core';
 import { AgentWorldService } from '../world/agent-world.service';
 import { LLMProvider, LLMMessage, ToolCall, LLMStreamChunk } from './llm-provider.interface';
 import { LLM_PROVIDER } from '../providers/llm-provider.token';
+import { ToolNameCodec } from '../events/tool-name-codec';
 
 /** Single step result in the agent's reasoning chain. */
 export interface AgentStep {
@@ -51,6 +52,7 @@ const DEFAULT_MAX_STEPS = 20;
 export class AgentHarness {
   private readonly world = inject(AgentWorldService);
   private readonly llm = inject(LLM_PROVIDER);
+  private readonly codec = new ToolNameCodec();
 
   /** Transparent thought stream exposed to the UI. */
   readonly thought = signal<string>('');
@@ -255,7 +257,7 @@ export class AgentHarness {
           // Optimized check timeout threshold from 5s down to 500ms to ignore websocket / polling blocks
           await this.waitForStableWithTimeout(500);
 
-          const { entryId, actionName } = this.parseToolName(toolCall.function.name);
+          const { entryId, actionName } = this.codec.decodeAction(toolCall.function.name);
           let args: Record<string, unknown> = {};
           try {
             args = JSON.parse(toolCall.function.arguments);
@@ -341,19 +343,5 @@ export class AgentHarness {
     } catch {
       // Stability timeout is non-fatal — proceed anyway
     }
-  }
-
-  // ---- Tool Name Parsing ----
-
-  /** Parse "entryId__actionName" back into components. */
-  private parseToolName(fullName: string): { entryId: string; actionName: string } {
-    const lastSep = fullName.lastIndexOf('__');
-    if (lastSep === -1) {
-      return { entryId: 'unknown', actionName: fullName };
-    }
-    return {
-      entryId: fullName.substring(0, lastSep),
-      actionName: fullName.substring(lastSep + 2),
-    };
   }
 }

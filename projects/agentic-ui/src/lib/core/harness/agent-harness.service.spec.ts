@@ -262,7 +262,7 @@ describe('AgentHarness', () => {
                 type: 'tool_call',
                 data: {
                   id: 'call_1',
-                  function: { name: 'add-btn__addTask', arguments: '{"title":"New task"}' },
+                  function: { name: 'add-btn__action__addTask', arguments: '{"title":"New task"}' },
                 },
               },
             ]),
@@ -286,7 +286,7 @@ describe('AgentHarness', () => {
                 type: 'tool_call',
                 data: {
                   id: 'call_1',
-                  function: { name: 'add-btn__addTask', arguments: '{"title":"test"}' },
+                  function: { name: 'add-btn__action__addTask', arguments: '{"title":"test"}' },
                 },
               },
             ]),
@@ -327,14 +327,14 @@ describe('AgentHarness', () => {
                 type: 'tool_call',
                 data: {
                   id: 'call_1',
-                  function: { name: 'add-btn__addTask', arguments: '{}' },
+                  function: { name: 'add-btn__action__addTask', arguments: '{}' },
                 },
               },
               {
                 type: 'tool_call',
                 data: {
                   id: 'call_2',
-                  function: { name: 'btn-2__click', arguments: '{}' },
+                  function: { name: 'btn-2__action__click', arguments: '{}' },
                 },
               },
             ]),
@@ -369,11 +369,11 @@ describe('AgentHarness', () => {
             new AsyncIterableChunks([
               {
                 type: 'tool_call',
-                data: { id: 'call_1', function: { name: 'add-btn__addTask', arguments: '{}' } },
+                data: { id: 'call_1', function: { name: 'add-btn__action__addTask', arguments: '{}' } },
               },
               {
                 type: 'tool_call',
-                data: { id: 'call_2', function: { name: 'btn-b__click', arguments: '{}' } },
+                data: { id: 'call_2', function: { name: 'btn-b__action__click', arguments: '{}' } },
               },
             ]),
         )
@@ -421,7 +421,7 @@ describe('AgentHarness', () => {
                 type: 'tool_call',
                 data: {
                   id: 'call_1',
-                  function: { name: 'btn__click', arguments: '{}' },
+                  function: { name: 'btn__action__click', arguments: '{}' },
                 },
               },
             ]),
@@ -487,17 +487,17 @@ describe('AgentHarness', () => {
 
   describe('parseToolName', () => {
     it('should correctly split entryId and actionName', () => {
-      const result = harness['parseToolName']('table-1__deleteRow');
+      const result = harness['codec'].decodeAction('table-1__action__deleteRow');
       expect(result).toEqual({ entryId: 'table-1', actionName: 'deleteRow' });
     });
 
     it('should handle names with multiple underscores', () => {
-      const result = harness['parseToolName']('my_component__do_stuff');
+      const result = harness['codec'].decodeAction('my_component__action__do_stuff');
       expect(result).toEqual({ entryId: 'my_component', actionName: 'do_stuff' });
     });
 
     it('should fall back to unknown when no separator found', () => {
-      const result = harness['parseToolName']('justAnAction');
+      const result = harness['codec'].decodeAction('justAnAction');
       expect(result).toEqual({ entryId: 'unknown', actionName: 'justAnAction' });
     });
   });
@@ -578,7 +578,7 @@ describe('AgentHarness', () => {
             {
               id: 'call_x',
               type: 'function' as const,
-              function: { name: 'btn__click', arguments: '{}' },
+              function: { name: 'btn__action__click', arguments: '{}' },
             },
           ],
         },
@@ -601,7 +601,7 @@ describe('AgentHarness', () => {
             {
               id: 'call_x',
               type: 'function' as const,
-              function: { name: 'btn__click', arguments: '{}' },
+              function: { name: 'btn__action__click', arguments: '{}' },
             },
           ],
         },
@@ -645,7 +645,7 @@ describe('AgentHarness', () => {
                 type: 'tool_call',
                 data: {
                   id: 'call_1',
-                  function: { name: 'delete-btn__delete', arguments: '{}' },
+                  function: { name: 'delete-btn__action__delete', arguments: '{}' },
                 },
               },
             ]),
@@ -696,7 +696,7 @@ describe('AgentHarness', () => {
                 type: 'tool_call',
                 data: {
                   id: 'call_1',
-                  function: { name: 'delete-btn__delete', arguments: '{}' },
+                  function: { name: 'delete-btn__action__delete', arguments: '{}' },
                 },
               },
             ]),

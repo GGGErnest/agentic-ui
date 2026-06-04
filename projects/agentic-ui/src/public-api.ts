@@ -112,6 +112,3 @@ export type {
 
 // Components — Approval
 export { AgentApprovalDialogComponent } from './lib/components/approval-dialog/agent-approval-dialog.component';
-
-// Module
-export { AgenticUiModule } from './lib/agentic-ui.module';

@@ -358,31 +358,35 @@ export class AgentHarness {
 
     events.push(runStarted({ threadId, runId }));
 
-    const snapshot = this.world.snapshot();
-    const stream = this.llm.getStream(this.messages, snapshot.tools, this.systemPrompt, undefined);
+    try {
+      const snapshot = this.world.snapshot();
+      const stream = this.llm.getStream(this.messages, snapshot.tools, this.systemPrompt, undefined);
 
-    const textDeltas: string[] = [];
-    const toolCalls: ToolCall[] = [];
+      const textDeltas: string[] = [];
+      const toolCalls: ToolCall[] = [];
 
-    for await (const chunk of stream) {
-      if ((chunk.type === 'content' || chunk.type === 'thought') && chunk.text) {
-        textDeltas.push(chunk.text);
-      } else if (chunk.type === 'tool_call' && chunk.data) {
-        toolCalls.push(chunk.data);
+      for await (const chunk of stream) {
+        if ((chunk.type === 'content' || chunk.type === 'thought') && chunk.text) {
+          textDeltas.push(chunk.text);
+        } else if (chunk.type === 'tool_call' && chunk.data) {
+          toolCalls.push(chunk.data);
+        }
       }
-    }
 
-    if (textDeltas.length > 0) {
-      const messageId = crypto.randomUUID();
-      events.push(textMessageStart({ messageId, role: 'assistant' }));
-      for (const delta of textDeltas) {
-        events.push(textMessageContent({ messageId, delta }));
+      if (textDeltas.length > 0) {
+        const messageId = crypto.randomUUID();
+        events.push(textMessageStart({ messageId, role: 'assistant' }));
+        for (const delta of textDeltas) {
+          events.push(textMessageContent({ messageId, delta }));
+        }
+        events.push(textMessageEnd({ messageId }));
       }
-      events.push(textMessageEnd({ messageId }));
-    }
 
-    if (toolCalls.length === 0) {
-      events.push(runFinished({ threadId, runId, outcome: 'success' }));
+      if (toolCalls.length === 0) {
+        events.push(runFinished({ threadId, runId, outcome: 'success' }));
+      }
+    } catch {
+      events.push(runFinished({ threadId, runId, outcome: 'error' }));
     }
 
     return events;

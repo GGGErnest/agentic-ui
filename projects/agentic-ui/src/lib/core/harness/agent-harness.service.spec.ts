@@ -199,6 +199,32 @@ describe('AgentHarness', () => {
       expect(types).toContain('TEXT_MESSAGE_END');
       expect(types[types.length - 1]).toBe('RUN_FINISHED');
     });
+
+    it('shares a single messageId across START/CONTENT/END', async () => {
+      vi.mocked(mockLLM.getStream).mockReturnValue(
+        new AsyncIterableChunks([
+          { type: 'content', text: 'A' },
+          { type: 'content', text: 'B' },
+          { type: 'content', text: 'C' },
+        ]),
+      );
+
+      const events = await harness.runWithEvents('hi');
+      const start = events.find((e) => e.type === 'TEXT_MESSAGE_START') as
+        | { type: 'TEXT_MESSAGE_START'; messageId: string }
+        | undefined;
+      const contents = events.filter(
+        (e) => e.type === 'TEXT_MESSAGE_CONTENT',
+      ) as { type: 'TEXT_MESSAGE_CONTENT'; messageId: string }[];
+      const end = events.find((e) => e.type === 'TEXT_MESSAGE_END') as
+        | { type: 'TEXT_MESSAGE_END'; messageId: string }
+        | undefined;
+      expect(start).toBeDefined();
+      expect(end).toBeDefined();
+      expect(contents).toHaveLength(3);
+      expect(contents.every((c) => c.messageId === start!.messageId)).toBe(true);
+      expect(end!.messageId).toBe(start!.messageId);
+    });
   });
 
   // ========== chatTurns ==========

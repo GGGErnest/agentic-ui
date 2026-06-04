@@ -1,4 +1,4 @@
-import { Injectable, signal, inject } from '@angular/core';
+import { Injectable, signal, computed, inject } from '@angular/core';
 import { AgentWorldService } from '../world/agent-world.service';
 import { LLMProvider, LLMMessage, ToolCall, LLMStreamChunk } from './llm-provider.interface';
 import { LLM_PROVIDER } from '../providers/llm-provider.token';
@@ -18,6 +18,11 @@ import {
   toolCallEnd,
   toolCallResult,
 } from '../events/agent-event.model';
+import { reduceAgentTimeline } from '../reducer/agent-timeline-reducer';
+import {
+  initialAgentTimelineState,
+  type AgentTimelineState,
+} from '../reducer/agent-state.model';
 
 /** Single step result in the agent's reasoning chain. */
 export interface AgentStep {
@@ -89,6 +94,19 @@ export class AgentHarness {
 
   /** Whether the agent is currently running a cycle. */
   readonly isRunning = signal<boolean>(false);
+
+  /** Append-only event log fed by `dispatchEvent` (typically from `runWithEvents`). */
+  private readonly eventLog = signal<AgentEvent[]>([]);
+
+  /** Reducer-projected shell state derived from `eventLog`. */
+  readonly state = computed<AgentTimelineState>(() =>
+    this.eventLog().reduce(reduceAgentTimeline, initialAgentTimelineState),
+  );
+
+  /** Feed a single event into the reducer-projected state. */
+  dispatchEvent(event: AgentEvent): void {
+    this.eventLog.update((events) => [...events, event]);
+  }
 
   /** Full conversation history sent to the LLM. */
   private messages: LLMMessage[] = [];
@@ -364,11 +382,16 @@ export class AgentHarness {
     const threadId = crypto.randomUUID();
     const runId = crypto.randomUUID();
 
-    events.push(runStarted({ threadId, runId }));
+    const record = (event: AgentEvent) => {
+      events.push(event);
+      this.dispatchEvent(event);
+    };
+
+    record(runStarted({ threadId, runId }));
 
     const stepName = 'reasoning';
     try {
-      events.push(stepStarted({ stepName }));
+      record(stepStarted({ stepName }));
 
       const snapshot = this.world.snapshot();
       const stream = this.llm.getStream(this.messages, snapshot.tools, this.systemPrompt, undefined);
@@ -384,32 +407,32 @@ export class AgentHarness {
         }
       }
 
-      events.push(stepFinished({ stepName }));
+      record(stepFinished({ stepName }));
 
       if (textDeltas.length > 0) {
         const messageId = crypto.randomUUID();
-        events.push(textMessageStart({ messageId, role: 'assistant' }));
+        record(textMessageStart({ messageId, role: 'assistant' }));
         for (const delta of textDeltas) {
-          events.push(textMessageContent({ messageId, delta }));
+          record(textMessageContent({ messageId, delta }));
         }
-        events.push(textMessageEnd({ messageId }));
+        record(textMessageEnd({ messageId }));
       }
 
       if (toolCalls.length > 0) {
         for (const toolCall of toolCalls) {
-          events.push(
+          record(
             toolCallStart({
               toolCallId: toolCall.id,
               toolCallName: toolCall.function.name,
             }),
           );
-          events.push(
+          record(
             toolCallArgs({
               toolCallId: toolCall.id,
               delta: toolCall.function.arguments,
             }),
           );
-          events.push(toolCallEnd({ toolCallId: toolCall.id }));
+          record(toolCallEnd({ toolCallId: toolCall.id }));
 
           const { entryId, actionName } = this.codec.decodeAction(toolCall.function.name);
           let args: Record<string, unknown> = {};
@@ -420,7 +443,7 @@ export class AgentHarness {
           }
           const result = await this.world.executeAction(entryId, actionName, args);
 
-          events.push(
+          record(
             toolCallResult({
               toolCallId: toolCall.id,
               content: result.message,
@@ -430,12 +453,12 @@ export class AgentHarness {
         }
       }
 
-      events.push(runFinished({ threadId, runId, outcome: 'success' }));
+      record(runFinished({ threadId, runId, outcome: 'success' }));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      events.push(stepFinished({ stepName }));
-      events.push(runError({ threadId, runId, message }));
-      events.push(runFinished({ threadId, runId, outcome: 'error' }));
+      record(stepFinished({ stepName }));
+      record(runError({ threadId, runId, message }));
+      record(runFinished({ threadId, runId, outcome: 'error' }));
     }
 
     return events;

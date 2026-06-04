@@ -14,6 +14,13 @@ import { AgentAction, AgentActionResult } from '../world/agent-action.model';
 import { WorldSnapshot } from '../world/world-entry.interface';
 import { AgentApprovalService } from '../approval/agent-approval.service';
 import { AgentEvent } from '../events/agent-event.model';
+import {
+  runStarted,
+  runFinished,
+  textMessageStart,
+  textMessageContent,
+  textMessageEnd,
+} from '../events/agent-event.model';
 
 // ---- Helpers ----
 
@@ -332,6 +339,49 @@ describe('AgentHarness', () => {
       expect((runErrors[0] as { message?: string }).message).toBe('boom');
       expect(events.at(-1)?.type).toBe('RUN_FINISHED');
       expect((events.at(-1) as { outcome?: string } | undefined)?.outcome).toBe('error');
+    });
+  });
+
+  describe('reducer-projected state', () => {
+    it('starts in the initial state', () => {
+      expect(harness.state().run.status).toBe('idle');
+      expect(harness.state().messages).toEqual([]);
+      expect(harness.state().toolCalls).toEqual([]);
+    });
+
+    it('updates the state computed when dispatchEvent feeds events', () => {
+      harness.dispatchEvent(
+        runStarted({ threadId: 't1', runId: 'r1' }),
+      );
+      harness.dispatchEvent(
+        textMessageStart({ messageId: 'm1', role: 'assistant' }),
+      );
+      harness.dispatchEvent(
+        textMessageContent({ messageId: 'm1', delta: 'hi' }),
+      );
+      harness.dispatchEvent(textMessageEnd({ messageId: 'm1' }));
+      harness.dispatchEvent(
+        runFinished({ threadId: 't1', runId: 'r1', outcome: 'success' }),
+      );
+
+      const state = harness.state();
+      expect(state.run.status).toBe('finished');
+      expect(state.messages).toHaveLength(1);
+      expect(state.messages[0].content).toBe('hi');
+      expect(state.timeline).toEqual([{ kind: 'message', id: 'm1' }]);
+    });
+
+    it('is populated as a side effect of runWithEvents', async () => {
+      vi.mocked(mockLLM.getStream).mockReturnValueOnce(
+        new AsyncIterableChunks([{ type: 'content', text: 'side-effect' }]),
+      );
+
+      await harness.runWithEvents('hi');
+
+      const state = harness.state();
+      expect(state.run.status).toBe('finished');
+      expect(state.messages).toHaveLength(1);
+      expect(state.messages[0].content).toBe('side-effect');
     });
   });
 

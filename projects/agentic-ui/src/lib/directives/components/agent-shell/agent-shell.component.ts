@@ -76,11 +76,13 @@ export class AgentShellComponent {
   });
 
   constructor() {
-    // Reactive Auto-Scrolling Effect tracking step history logs and thought streams
+    // Reactive Auto-Scrolling Effect tracking step history logs, thought streams,
+    // and the reducer-projected shell state.
     effect(() => {
       this.harness.chatTurns();
       this.harness.steps();
       this.harness.thought();
+      this.harness.state();
       this.scrollToBottom();
     });
 
@@ -94,6 +96,7 @@ export class AgentShellComponent {
           messages: () => this.harness.exportConversation().messages,
           system: () => this.harness.exportConversation().systemPrompt,
           steps: () => this.harness.steps(),
+          state: () => this.harness.state(),
           status: () => ({
             isRunning: this.harness.isRunning(),
             isStable: this.world.isStable(),

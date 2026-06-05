@@ -9,7 +9,9 @@ import {
   inject,
   isDevMode,
   signal,
+  Type,
   viewChild,
+  WritableSignal,
 } from '@angular/core';
 
 declare global {
@@ -19,6 +21,9 @@ declare global {
 }
 import { AgentHarness } from '../../../core/harness/agent-harness.service';
 import { AgentWorldService } from '../../../core/world/agent-world.service';
+import { ToolNameCodec } from '../../../core/events/tool-name-codec';
+import { ToolRenderContext } from '../../../core/world/agent-action.model';
+import { AgentToolRendererComponent } from '../../../core/generative/agent-tool-renderer.component';
 import { AgentApprovalDialogComponent } from '../../../components/approval-dialog/agent-approval-dialog.component';
 import { TelemetryOverlayComponent } from '../telemetry-overlay/telemetry-overlay.component';
 
@@ -36,7 +41,7 @@ import { TelemetryOverlayComponent } from '../telemetry-overlay/telemetry-overla
 @Component({
   selector: 'agui-agent-shell',
   standalone: true,
-  imports: [AgentApprovalDialogComponent, TelemetryOverlayComponent],
+  imports: [AgentApprovalDialogComponent, TelemetryOverlayComponent, AgentToolRendererComponent],
   changeDetection: ChangeDetectionStrategy.OnPush,
   templateUrl: './agent-shell.component.html',
   styleUrl: './agent-shell.component.scss',
@@ -51,6 +56,9 @@ export class AgentShellComponent {
   userInput = signal<string>('');
   isExpanded = signal<boolean>(false);
   private abortController: AbortController | null = null;
+
+  private readonly codec = new ToolNameCodec();
+  private readonly renderContexts = new Map<string, WritableSignal<ToolRenderContext>>();
 
   readonly shadowActive = this.world.shadowMode;
   readonly focusedId = this.world.focusedEntryId;
@@ -75,6 +83,58 @@ export class AgentShellComponent {
     return prompts.slice(0, 3);
   });
 
+  readonly renderedToolCalls = computed(() => {
+    return this.harness
+      .state()
+      .toolCalls.map((tc) => {
+        const { entryId, actionName } = this.codec.decodeAction(tc.name);
+        const entry = this.world.entries().get(entryId);
+        const action = entry?.actions.find((a) => a.name === actionName);
+        if (!action?.renderComponent) return null;
+
+        let ctxSignal = this.renderContexts.get(tc.id);
+        if (!ctxSignal) {
+          ctxSignal = signal<ToolRenderContext>(this.buildRenderContext(tc, entryId, actionName));
+          this.renderContexts.set(tc.id, ctxSignal);
+        } else {
+          ctxSignal.set(this.buildRenderContext(tc, entryId, actionName));
+        }
+        return {
+          id: tc.id,
+          componentType: action.renderComponent as Type<unknown>,
+          renderInputs: action.renderInputs,
+          contextSignal: ctxSignal,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+  });
+
+  private buildRenderContext(
+    tc: {
+      args: string;
+      status: 'pending' | 'executing' | 'complete' | 'error';
+      result?: string;
+      error?: string;
+    },
+    entryId: string,
+    actionName: string,
+  ): ToolRenderContext {
+    let args: Record<string, unknown> = {};
+    try {
+      args = JSON.parse(tc.args);
+    } catch {
+      /* malformed */
+    }
+    return {
+      entryId,
+      actionName,
+      args,
+      status: tc.status,
+      result: tc.result,
+      error: tc.error,
+    };
+  }
+
   constructor() {
     // Reactive Auto-Scrolling Effect tracking step history logs, thought streams,
     // and the reducer-projected shell state.
@@ -84,6 +144,13 @@ export class AgentShellComponent {
       this.harness.thought();
       this.harness.state();
       this.scrollToBottom();
+    });
+
+    effect(() => {
+      const liveIds = new Set(this.harness.state().toolCalls.map((tc) => tc.id));
+      for (const id of [...this.renderContexts.keys()]) {
+        if (!liveIds.has(id)) this.renderContexts.delete(id);
+      }
     });
 
     // Dev-only: expose window.Agent debugger after first render.

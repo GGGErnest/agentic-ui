@@ -8,8 +8,10 @@ import {
   ComponentRef,
   Type,
   Injector,
+  Input,
   runInInjectionContext,
   EnvironmentInjector,
+  WritableSignal,
 } from '@angular/core';
 import { ToolRenderContext } from '../world/agent-action.model';
 
@@ -33,14 +35,14 @@ export class AgentToolRendererComponent {
   private readonly envInjector = inject(EnvironmentInjector);
   private ref: ComponentRef<unknown> | null = null;
 
-  componentType: Type<unknown> | null = null;
-  context = signal<ToolRenderContext>({
+  @Input() componentType: Type<unknown> | null = null;
+  @Input() context: WritableSignal<ToolRenderContext> = signal<ToolRenderContext>({
     entryId: '',
     actionName: '',
     args: {},
     status: 'pending',
   });
-  renderInputs?: (ctx: ToolRenderContext) => Record<string, unknown>;
+  @Input() renderInputs?: (ctx: ToolRenderContext) => Record<string, unknown>;
 
   constructor() {
     runInInjectionContext(this.injector, () => {

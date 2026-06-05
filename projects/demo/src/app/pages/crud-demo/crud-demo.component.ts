@@ -169,6 +169,17 @@ export class CrudDemo {
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       execute: async () => this.clearAgentZone(),
     },
+    {
+      name: 'previewTask',
+      description: 'Preview a task by rendering its status card in the Agent Showcase panel.',
+      inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+      execute: async () => ({
+        success: true,
+        message: 'Preview rendered.',
+      }),
+      renderComponent: AgentStatusCardComponent,
+      renderInputs: () => ({}),
+    },
   ];
 
   private createValueReadable<T>(
@@ -238,14 +249,9 @@ export class CrudDemo {
         type: 'boolean',
       },
     ),
-    this.createValueReadable(
-      'editId',
-      'Current task id being edited.',
-      () => this.editId(),
-      {
-        type: 'string',
-      },
-    ),
+    this.createValueReadable('editId', 'Current task id being edited.', () => this.editId(), {
+      type: 'string',
+    }),
     this.createValueReadable(
       'pendingMatchRequest',
       'Current pending delete-match resolution payload.',

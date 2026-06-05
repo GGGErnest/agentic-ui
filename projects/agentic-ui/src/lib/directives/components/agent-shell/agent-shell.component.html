@@ -31,9 +31,7 @@
           >
             ↺
           </button>
-          <button class="agent-shell__btn-icon" (click)="toggleExpand()" title="Minimize">
-            ✕
-          </button>
+          <button class="agent-shell__btn-icon" (click)="toggleExpand()" title="Minimize">✕</button>
         </div>
       </div>
 
@@ -99,6 +97,19 @@
               <div class="agent-shell__thought-stream-body">{{ liveThought }}</div>
             </div>
           }
+        }
+
+        @if (renderedToolCalls().length > 0) {
+          <div class="agent-shell__rendered-tools">
+            <div class="agent-shell__steps-label">Tool Renders</div>
+            @for (tc of renderedToolCalls(); track tc.id) {
+              <agui-tool-renderer
+                [componentType]="tc.componentType"
+                [context]="tc.contextSignal"
+                [renderInputs]="tc.renderInputs"
+              />
+            }
+          </div>
         }
       </div>
 

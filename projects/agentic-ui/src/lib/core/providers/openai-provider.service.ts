@@ -34,6 +34,11 @@ export interface OpenAiProviderConfig {
  *   { provide: LLM_PROVIDER, useFactory: () => provideOpenAi({ apiKey: 'sk-...' }) }
  * ]
  * ```
+ *
+ * SECURITY: This provider requires an API key in the constructor. Do not
+ * use it in browser code that ships to users. Use a server proxy or
+ * `RuntimeProxyService` instead. This provider is intended for trusted
+ * server-side or local development usage only.
  */
 export class OpenAiProvider implements LLMProvider {
   private readonly apiUrl: string;

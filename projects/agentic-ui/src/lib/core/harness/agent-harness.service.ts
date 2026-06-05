@@ -404,6 +404,10 @@ export class AgentHarness {
       this.dispatchEvent(event);
     };
 
+    if (userPrompt) {
+      this.messages.push({ role: 'user', content: userPrompt });
+    }
+
     record(runStarted({ threadId, runId }));
 
     let previousState: Record<string, unknown> = {};

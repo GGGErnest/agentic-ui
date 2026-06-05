@@ -93,15 +93,15 @@ export class AgentApprovalService {
 
   /** User approved the current ticket. */
   approve(): void {
-    this.resolveCurrent(true, 'Action approved by user.');
+    this.resolveCurrent(true);
   }
 
   /** User rejected the current ticket. */
   reject(): void {
-    this.resolveCurrent(false, 'Action rejected by user.');
+    this.resolveCurrent(false);
   }
 
-  private resolveCurrent(approved: boolean, message: string): void {
+  private resolveCurrent(approved: boolean): void {
     const items = this.queue();
     if (items.length === 0) return;
 

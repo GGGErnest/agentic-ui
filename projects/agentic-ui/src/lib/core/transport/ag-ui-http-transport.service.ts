@@ -70,28 +70,43 @@ export class AgUiHttpTransport implements AgentTransport {
     const decoder = new TextDecoder();
     let buffer = '';
 
+    const drainBuffer = (): AgentEvent[] => {
+      const events: AgentEvent[] = [];
+      let sepIdx: number;
+      while ((sepIdx = buffer.indexOf('\n\n')) !== -1) {
+        const rawEvent = buffer.slice(0, sepIdx);
+        buffer = buffer.slice(sepIdx + 2);
+
+        const dataLine = rawEvent.split('\n').find((line) => line.startsWith('data:'));
+        if (!dataLine) continue;
+        const json = dataLine.slice(5).trim();
+        if (!json) continue;
+        try {
+          const parsed: unknown = JSON.parse(json);
+          if (
+            parsed !== null &&
+            typeof parsed === 'object' &&
+            'type' in parsed &&
+            typeof (parsed as { type: unknown }).type === 'string'
+          ) {
+            events.push(parsed as AgentEvent);
+          }
+        } catch {
+          /* ignore parse errors */
+        }
+      }
+      return events;
+    };
+
     try {
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-
-        let sepIdx: number;
-        while ((sepIdx = buffer.indexOf('\n\n')) !== -1) {
-          const rawEvent = buffer.slice(0, sepIdx);
-          buffer = buffer.slice(sepIdx + 2);
-
-          const dataLine = rawEvent.split('\n').find((line) => line.startsWith('data:'));
-          if (!dataLine) continue;
-          const json = dataLine.slice(5).trim();
-          if (!json) continue;
-          try {
-            yield JSON.parse(json) as AgentEvent;
-          } catch {
-            /* ignore parse errors */
-          }
-        }
+        for (const event of drainBuffer()) yield event;
       }
+      buffer += decoder.decode();
+      for (const event of drainBuffer()) yield event;
     } finally {
       reader.releaseLock();
     }

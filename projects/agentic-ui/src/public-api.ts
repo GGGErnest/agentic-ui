@@ -75,6 +75,7 @@ export { JSON_RPC_ERROR_CODES } from './lib/core/transport/json-rpc.models';
 // Core — Agent Transport
 export { AGENT_TRANSPORT } from './lib/core/transport/agent-transport.token';
 export { DirectLLMTransport } from './lib/core/transport/direct-llm-transport.service';
+export { AgUiHttpTransport, type AgUiHttpTransportConfig } from './lib/core/transport/ag-ui-http-transport.service';
 export type { AgentTransport } from './lib/core/transport/agent-transport.interface';
 
 // Core — MCP Transport (values)

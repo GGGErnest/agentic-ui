@@ -287,21 +287,4 @@ export class DirectLLMTransport implements AgentTransport {
       };
     }
   }
-
-  /**
-   * Wait for Angular stability with a timeout. Stability timeout is
-   * non-fatal — the caller proceeds even if stability is not reached.
-   */
-  private async waitForStableWithTimeout(timeoutMs: number): Promise<void> {
-    try {
-      await Promise.race([
-        this.world.waitForStable(),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error('Stability timeout')), timeoutMs),
-        ),
-      ]);
-    } catch {
-      // Stability timeout is non-fatal — proceed anyway
-    }
-  }
 }

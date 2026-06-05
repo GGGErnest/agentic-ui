@@ -1,4 +1,5 @@
 import { AgUiHttpTransport } from './ag-ui-http-transport.service';
+import type { AgentEvent } from '../events/agent-event.model';
 
 describe('AgUiHttpTransport', () => {
   let transport: AgUiHttpTransport;
@@ -29,7 +30,7 @@ describe('AgUiHttpTransport', () => {
         new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } }),
     ) as unknown as typeof fetch;
 
-    const events: any[] = [];
+    const events: AgentEvent[] = [];
     for await (const e of transport.run({ threadId: 't', runId: 'r', messages: [] })) {
       events.push(e);
     }
@@ -44,7 +45,7 @@ describe('AgUiHttpTransport', () => {
     globalThis.fetch = vi.fn(
       async () => new Response('nope', { status: 500 }),
     ) as unknown as typeof fetch;
-    const events: any[] = [];
+    const events: AgentEvent[] = [];
     for await (const e of transport.run({ threadId: 't', runId: 'r', messages: [] })) {
       events.push(e);
     }

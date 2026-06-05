@@ -35,8 +35,32 @@ describe('RuntimeProxyService', () => {
     expect(events.at(-1)?.type).toBe('RUN_FINISHED');
   });
 
-  it('never reads API keys from the browser environment', () => {
-    expect((service as unknown as { apiKey: unknown }).apiKey).toBeUndefined();
-    expect((service as unknown as Record<string, unknown>)['LLM_API_KEY']).toBeUndefined();
+  it('does not attach Authorization headers by default', async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          new ReadableStream({
+            start(c) {
+              c.enqueue(
+                new TextEncoder().encode(
+                  'data: {"type":"RUN_FINISHED","threadId":"t","runId":"r","outcome":"success"}\n\n',
+                ),
+              );
+              c.close();
+            },
+          }),
+        ),
+    ) as unknown as typeof fetch;
+    globalThis.fetch = fetchMock;
+
+    for await (const _ of service.streamEvents({ threadId: 't', runId: 'r', messages: [] })) {
+      /* drain */
+    }
+
+    const call = (fetchMock as ReturnType<typeof vi.fn>).mock.calls[0];
+    const init = call[1] as RequestInit;
+    const headers = init.headers as Record<string, string>;
+    expect(headers['Authorization']).toBeUndefined();
+    expect(headers['LLM_API_KEY']).toBeUndefined();
   });
 });

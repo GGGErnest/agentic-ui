@@ -1,7 +1,8 @@
 import { Injectable } from '@angular/core';
-import { runError } from '../events/agent-event.model';
+import { runError, runFinished } from '../events/agent-event.model';
 import type { AgentEvent } from '../events/agent-event.model';
 import type { AgentRunInput } from '../events/agent-run.model';
+import { drainSseFrames } from '../transport/sse-parser';
 
 /**
  * RuntimeProxyService — browser-safe SSE proxy for AG-UI events.
@@ -15,7 +16,10 @@ import type { AgentRunInput } from '../events/agent-run.model';
 @Injectable({ providedIn: 'root' })
 export class RuntimeProxyService {
   private endpoint = '/api/agent/run';
-  private headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  private headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    Accept: 'text/event-stream',
+  };
 
   setEndpoint(url: string): void {
     this.endpoint = url;
@@ -26,19 +30,32 @@ export class RuntimeProxyService {
   }
 
   async *streamEvents(input: AgentRunInput): AsyncIterable<AgentEvent> {
-    const response = await fetch(this.endpoint, {
-      method: 'POST',
-      headers: this.headers,
-      body: JSON.stringify(input),
-    });
-    if (!response.ok || !response.body) {
-      yield runError({
-        threadId: input.threadId,
-        runId: input.runId,
-        message: `Proxy error ${response.status}`,
+    const { threadId, runId } = input;
+
+    let response: Response;
+    try {
+      response = await fetch(this.endpoint, {
+        method: 'POST',
+        headers: this.headers,
+        body: JSON.stringify(input),
       });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      yield runError({ threadId, runId, message });
+      yield runFinished({ threadId, runId, outcome: 'error' });
       return;
     }
+
+    if (!response.ok || !response.body) {
+      yield runError({
+        threadId,
+        runId,
+        message: `Proxy error ${response.status}`,
+      });
+      yield runFinished({ threadId, runId, outcome: 'error' });
+      return;
+    }
+
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
@@ -47,45 +64,10 @@ export class RuntimeProxyService {
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
-        const frames = buffer.split('\n\n');
-        buffer = frames.pop() ?? '';
-        for (const frame of frames) {
-          const line = frame.split('\n').find((l) => l.startsWith('data: '));
-          if (!line) continue;
-          try {
-            const parsed: unknown = JSON.parse(line.slice(6));
-            if (
-              parsed !== null &&
-              typeof parsed === 'object' &&
-              'type' in parsed &&
-              typeof (parsed as { type: unknown }).type === 'string'
-            ) {
-              yield parsed as AgentEvent;
-            }
-          } catch {
-            // skip malformed
-          }
-        }
+        buffer = yield* drainSseFrames(buffer);
       }
       buffer += decoder.decode();
-      if (buffer.trim().length > 0) {
-        const line = buffer.split('\n').find((l) => l.startsWith('data: '));
-        if (line) {
-          try {
-            const parsed: unknown = JSON.parse(line.slice(6));
-            if (
-              parsed !== null &&
-              typeof parsed === 'object' &&
-              'type' in parsed &&
-              typeof (parsed as { type: unknown }).type === 'string'
-            ) {
-              yield parsed as AgentEvent;
-            }
-          } catch {
-            // skip
-          }
-        }
-      }
+      buffer = yield* drainSseFrames(buffer);
     } finally {
       reader.releaseLock();
     }

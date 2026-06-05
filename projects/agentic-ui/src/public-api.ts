@@ -85,6 +85,9 @@ export type { McpTool, McpToolExecutionResult } from './lib/core/transport/mcp-t
 export { WebsocketTransportService, WebSocketState } from './lib/core/transport/websocket-transport.service';
 export type { ReconnectState } from './lib/core/transport/websocket-transport.service';
 
+// Core — Runtime
+export { RuntimeProxyService } from './lib/core/runtime/runtime-proxy.service';
+
 // Core — Component Contract
 export type { AgenticComponent } from './lib/core/world/agentic-component.token';
 export { AGENTIC_COMPONENT } from './lib/core/world/agentic-component.token';

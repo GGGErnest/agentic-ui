@@ -15,6 +15,8 @@ export type {
   AgentActionDef,
   AgentActionResult,
   ActionParameter,
+  ToolRenderContext,
+  ToolRenderMode,
 } from './lib/core/world/agent-action.model';
 export type {
   WorldEntry,

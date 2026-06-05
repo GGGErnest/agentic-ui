@@ -9,7 +9,6 @@ import {
   inject,
   isDevMode,
   signal,
-  Type,
   viewChild,
   WritableSignal,
 } from '@angular/core';
@@ -59,6 +58,7 @@ export class AgentShellComponent {
 
   private readonly codec = new ToolNameCodec();
   private readonly renderContexts = new Map<string, WritableSignal<ToolRenderContext>>();
+  private readonly _renderedKeys = signal<string[]>([]);
 
   readonly shadowActive = this.world.shadowMode;
   readonly focusedId = this.world.focusedEntryId;
@@ -84,29 +84,24 @@ export class AgentShellComponent {
   });
 
   readonly renderedToolCalls = computed(() => {
-    return this.harness
-      .state()
-      .toolCalls.map((tc) => {
-        const { entryId, actionName } = this.codec.decodeAction(tc.name);
-        const entry = this.world.entries().get(entryId);
-        const action = entry?.actions.find((a) => a.name === actionName);
-        if (!action?.renderComponent) return null;
-
-        let ctxSignal = this.renderContexts.get(tc.id);
-        if (!ctxSignal) {
-          ctxSignal = signal<ToolRenderContext>(this.buildRenderContext(tc, entryId, actionName));
-          this.renderContexts.set(tc.id, ctxSignal);
-        } else {
-          ctxSignal.set(this.buildRenderContext(tc, entryId, actionName));
-        }
-        return {
-          id: tc.id,
-          componentType: action.renderComponent as Type<unknown>,
+    return this._renderedKeys().flatMap((id) => {
+      const ctxSig = this.renderContexts.get(id);
+      if (!ctxSig) return [];
+      const tc = this.harness.state().toolCalls.find((t) => t.id === id);
+      if (!tc) return [];
+      const { entryId, actionName } = this.codec.decodeAction(tc.name);
+      const entry = this.world.entries().get(entryId);
+      const action = entry?.actions.find((a) => a.name === actionName);
+      if (!action?.renderComponent) return [];
+      return [
+        {
+          id,
+          componentType: action.renderComponent,
           renderInputs: action.renderInputs,
-          contextSignal: ctxSignal,
-        };
-      })
-      .filter((x): x is NonNullable<typeof x> => x !== null);
+          contextSignal: ctxSig,
+        },
+      ];
+    });
   });
 
   private buildRenderContext(
@@ -146,12 +141,34 @@ export class AgentShellComponent {
       this.scrollToBottom();
     });
 
+    // Maintenance effect: keeps the renderContexts Map and _renderedKeys signal
+    // in sync with the harness's toolCalls. Writes a signal so the computed above
+    // recomputes when the set of rendered tools changes.
     effect(() => {
-      const liveIds = new Set(this.harness.state().toolCalls.map((tc) => tc.id));
+      const tcs = this.harness.state().toolCalls;
+      const liveIds = new Set(tcs.map((tc) => tc.id));
+
+      for (const tc of tcs) {
+        const { entryId, actionName } = this.codec.decodeAction(tc.name);
+        const entry = this.world.entries().get(entryId);
+        const action = entry?.actions.find((a) => a.name === actionName);
+        if (!action?.renderComponent) continue;
+        const ctx = this.buildRenderContext(tc, entryId, actionName);
+        let sig = this.renderContexts.get(tc.id);
+        if (!sig) {
+          sig = signal<ToolRenderContext>(ctx);
+          this.renderContexts.set(tc.id, sig);
+        } else {
+          sig.set(ctx);
+        }
+      }
+
       for (const id of [...this.renderContexts.keys()]) {
         if (!liveIds.has(id)) this.renderContexts.delete(id);
       }
-    });
+
+      this._renderedKeys.set([...liveIds]);
+    }, { allowSignalWrites: true });
 
     // Dev-only: expose window.Agent debugger after first render.
     afterNextRender(() => {

@@ -25,7 +25,7 @@ export interface ToolRenderContext {
 }
 
 /** Where the renderer mounts the tool component in the shell. */
-export type RenderMode = 'inline' | 'dropzone' | 'modal';
+export type ToolRenderMode = 'inline' | 'dropzone' | 'modal';
 
 /** Definition of an action a component exposes to the agent. */
 export interface AgentActionDef {
@@ -41,7 +41,7 @@ export interface AgentActionDef {
   /** Maps the render context to component inputs. Default: passes the full context. */
   renderInputs?: (ctx: ToolRenderContext) => Record<string, unknown>;
   /** How the shell should mount the renderer. Default: 'inline'. */
-  renderMode?: RenderMode;
+  renderMode?: ToolRenderMode;
 }
 
 /** Result returned after executing an action. */

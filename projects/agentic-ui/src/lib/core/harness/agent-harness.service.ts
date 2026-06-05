@@ -143,6 +143,7 @@ export class AgentHarness {
     this.thought.set('');
     this.steps.set([]);
     this.chatTurns.set([]);
+    this.pendingApprovalPromises.clear();
     this.world.blur();
   }
 
@@ -463,14 +464,13 @@ export class AgentHarness {
             /* arguments may be malformed */
           }
 
-          const action = this.world.entries().get(entryId)?.actions.find(
-            (a) => a.name === actionName,
-          );
+          const entry = this.world.entries().get(entryId);
+          const action = entry?.actions.find((a) => a.name === actionName);
 
           if (action?.requiresApproval) {
             const { id: ticketId, promise } = this.approval.requestApprovalTicket(
               entryId,
-              this.world.entries().get(entryId)?.role ?? '',
+              entry?.role ?? '',
               actionName,
               action.description,
               args,
@@ -534,6 +534,10 @@ export class AgentHarness {
    */
   async resume(input: AgentRunInput): Promise<AgentEvent[]> {
     const events: AgentEvent[] = [];
+    const record = (event: AgentEvent) => {
+      events.push(event);
+      this.dispatchEvent(event);
+    };
     const threadId = input.threadId;
     const runId = input.runId;
     const parentRunId = input.parentRunId;
@@ -542,31 +546,39 @@ export class AgentHarness {
       this.systemPrompt = input.systemPrompt;
     }
 
+    record(runStarted({ threadId, runId, parentRunId }));
+
     const decisions = input.resume ?? {};
     const interruptIds = Object.keys(decisions);
     const matched = this.interrupts.consume(parentRunId ?? runId, interruptIds);
 
+    let actionFailed = false;
     for (const interrupt of matched) {
       const decision = decisions[interrupt.id];
       if (!decision) continue;
 
       const toolName = `${interrupt.entryId}__action__${interrupt.actionName}`;
-      events.push(
+      record(
         toolCallStart({
           toolCallId: interrupt.toolCallId,
           toolCallName: toolName,
         }),
+      );
+      record(
         toolCallArgs({
           toolCallId: interrupt.toolCallId,
           delta: JSON.stringify(interrupt.params ?? {}),
         }),
-        toolCallEnd({ toolCallId: interrupt.toolCallId }),
       );
+      record(toolCallEnd({ toolCallId: interrupt.toolCallId }));
 
       if (decision.decision === 'approved') {
         const approvalPromise =
           this.pendingApprovalPromises.get(interrupt.id) ?? Promise.resolve(true);
         this.pendingApprovalPromises.delete(interrupt.id);
+        // Pre-resolve the approval ticket so the queue is drained even if
+        // the caller never invoked approval.approve()/reject().
+        this.approval.resolveById(interrupt.id, true);
         const approved = await approvalPromise;
         if (approved) {
           const result = await this.executeApprovedAction(
@@ -574,15 +586,16 @@ export class AgentHarness {
             interrupt.actionName,
             interrupt.params,
           );
-          events.push(
+          record(
             toolCallResult({
               toolCallId: interrupt.toolCallId,
               content: result.message,
               role: 'tool',
             }),
           );
+          if (!result.success) actionFailed = true;
         } else {
-          events.push(
+          record(
             toolCallResult({
               toolCallId: interrupt.toolCallId,
               content: 'Action rejected by user.',
@@ -592,7 +605,8 @@ export class AgentHarness {
         }
       } else if (decision.decision === 'rejected') {
         this.pendingApprovalPromises.delete(interrupt.id);
-        events.push(
+        this.approval.resolveById(interrupt.id, false);
+        record(
           toolCallResult({
             toolCallId: interrupt.toolCallId,
             content: decision.reason ?? 'Action rejected by user.',
@@ -601,7 +615,8 @@ export class AgentHarness {
         );
       } else {
         this.pendingApprovalPromises.delete(interrupt.id);
-        events.push(
+        this.approval.resolveById(interrupt.id, false);
+        record(
           toolCallResult({
             toolCallId: interrupt.toolCallId,
             content: JSON.stringify(decision.value ?? null),
@@ -611,7 +626,11 @@ export class AgentHarness {
       }
     }
 
-    events.push(runFinished({ threadId, runId, outcome: 'success' }));
+    if (actionFailed) {
+      record(runFinished({ threadId, runId, parentRunId, outcome: 'error' }));
+    } else {
+      record(runFinished({ threadId, runId, parentRunId, outcome: 'success' }));
+    }
     return events;
   }
 

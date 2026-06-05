@@ -1120,6 +1120,63 @@ describe('AgentHarness', () => {
       expect(result?.content).toContain('rejected');
       expect(execute).not.toHaveBeenCalled();
     });
+
+    it('emits the value payload as the result content on decision=value', async () => {
+      world.register({
+        id: 'del',
+        role: 'Button',
+        actions: [
+          {
+            name: 'rm',
+            description: 'rm',
+            requiresApproval: true,
+            execute: vi.fn(),
+          },
+        ],
+      });
+
+      vi.mocked(mockLLM.getStream).mockReturnValueOnce(
+        new AsyncIterableChunks([
+          {
+            type: 'tool_call',
+            data: { id: 'c1', function: { name: 'del__action__rm', arguments: '{}' } },
+          },
+        ]),
+      );
+
+      const events = await harness.runWithEvents('remove something');
+      const fin = events.find((e) => e.type === 'RUN_FINISHED') as
+        | { runId: string; interrupts?: { id: string }[] }
+        | undefined;
+      const interruptId = fin!.interrupts![0].id;
+
+      const resumed = await harness.resume({
+        threadId: 't',
+        runId: 'r-new',
+        parentRunId: fin!.runId,
+        messages: [],
+        resume: { [interruptId]: { decision: 'value', value: { reason: 'user typed it' } } },
+      });
+
+      const result = resumed.find((e) => e.type === 'TOOL_CALL_RESULT') as
+        | { content: string }
+        | undefined;
+      expect(result?.content).toBe(JSON.stringify({ reason: 'user typed it' }));
+    });
+
+    it('emits a successful RUN_FINISHED when no matching interrupts are found', async () => {
+      const resumed = await harness.resume({
+        threadId: 't',
+        runId: 'r-new',
+        parentRunId: 'r-original',
+        messages: [],
+        resume: { i_nonexistent: { decision: 'approved' } },
+      });
+
+      expect(resumed.at(0)?.type).toBe('RUN_STARTED');
+      expect(resumed.at(-1)?.type).toBe('RUN_FINISHED');
+      expect((resumed.at(-1) as { outcome?: string } | undefined)?.outcome).toBe('success');
+    });
   });
 });
 

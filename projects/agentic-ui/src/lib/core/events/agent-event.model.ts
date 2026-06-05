@@ -159,6 +159,7 @@ export function runStarted(input: {
 export function runFinished(input: {
   threadId: string;
   runId: string;
+  parentRunId?: string;
   outcome: RunFinishedOutcome;
   result?: unknown;
   interrupts?: RunInterrupt[];

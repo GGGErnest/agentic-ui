@@ -1,7 +1,12 @@
 import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { routes } from './app.routes';
-import { AgentHarness, LLM_PROVIDER } from 'agentic-ui';
+import {
+  AgentHarness,
+  DirectLLMTransport,
+  AGENT_TRANSPORT,
+  LLM_PROVIDER,
+} from 'agentic-ui';
 import { environment } from '../environments/environment';
 import { createDemoLlmProvider } from './llm/demo-llm-provider.factory';
 
@@ -16,6 +21,10 @@ export const appConfig: ApplicationConfig = {
 
     // Provide the AgentHarness service
     AgentHarness,
+
+    // Default AgentTransport (override by providing AGENT_TRANSPORT with a different impl)
+    DirectLLMTransport,
+    { provide: AGENT_TRANSPORT, useExisting: DirectLLMTransport },
 
     // LLM Provider selected based on environment
     {

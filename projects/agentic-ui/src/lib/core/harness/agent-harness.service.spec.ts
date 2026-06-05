@@ -22,6 +22,8 @@ import {
   textMessageContent,
   textMessageEnd,
 } from '../events/agent-event.model';
+import { DirectLLMTransport } from '../transport/direct-llm-transport.service';
+import { AGENT_TRANSPORT } from '../transport/agent-transport.token';
 
 // ---- Helpers ----
 
@@ -73,6 +75,8 @@ describe('AgentHarness', () => {
       providers: [
         AgentWorldService,
         AgentHarness,
+        DirectLLMTransport,
+        { provide: AGENT_TRANSPORT, useExisting: DirectLLMTransport },
         { provide: ApplicationRef, useValue: appRef },
         { provide: LLM_PROVIDER, useValue: mockLLM },
       ],
@@ -97,6 +101,8 @@ describe('AgentHarness', () => {
       TestBed.configureTestingModule({
         providers: [
           AgentWorldService,
+          DirectLLMTransport,
+          { provide: AGENT_TRANSPORT, useExisting: DirectLLMTransport },
           { provide: ApplicationRef, useValue: createMockAppRef() },
           { provide: LLM_PROVIDER, useValue: createMockLLM() },
         ],

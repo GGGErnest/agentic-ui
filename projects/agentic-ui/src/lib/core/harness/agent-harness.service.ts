@@ -3,35 +3,16 @@ import { AgentWorldService } from '../world/agent-world.service';
 import { LLMProvider, LLMMessage, ToolCall, LLMStreamChunk } from './llm-provider.interface';
 import { LLM_PROVIDER } from '../providers/llm-provider.token';
 import { ToolNameCodec } from '../events/tool-name-codec';
-import {
-  AgentEvent,
-  runStarted,
-  runFinished,
-  runError,
-  stepStarted,
-  stepFinished,
-  textMessageStart,
-  textMessageContent,
-  textMessageEnd,
-  toolCallStart,
-  toolCallArgs,
-  toolCallEnd,
-  toolCallResult,
-  stateSnapshot,
-  stateDelta,
-  type RunInterrupt,
-} from '../events/agent-event.model';
+import { AgentEvent, type MessagesSnapshotMessage } from '../events/agent-event.model';
 import { reduceAgentTimeline } from '../reducer/agent-timeline-reducer';
 import {
   initialAgentTimelineState,
   type AgentTimelineState,
 } from '../reducer/agent-state.model';
 import { StateSnapshotService } from '../snapshot/state-snapshot.service';
-import { AgentApprovalService } from '../approval/agent-approval.service';
-import {
-  InterruptRegistryService,
-  type PendingInterrupt,
-} from '../interrupt/interrupt-registry.service';
+import { AGENT_TRANSPORT } from '../transport/agent-transport.token';
+import { AgentTransport } from '../transport/agent-transport.interface';
+import { DirectLLMTransport } from '../transport/direct-llm-transport.service';
 import type { AgentRunInput } from '../events/agent-run.model';
 
 /** Single step result in the agent's reasoning chain. */
@@ -71,12 +52,14 @@ const DEFAULT_MAX_STEPS = 20;
 /**
  * AgentHarness — the "Brain" of the Agentic-UI framework.
  *
- * Manages the ReAct (Reasoning + Acting) loop:
- * 1. Sends world snapshot + user prompt to LLM.
- * 2. Streams thought tokens for transparency.
- * 3. Dispatches tool calls to the World Registry.
- * 4. Waits for Angular stability before each observation.
- * 5. Maintains conversation history.
+ * Maintains the conversation state and reduces the AG-UI event stream
+ * into shell state. The ReAct loop itself is delegated to an
+ * `AgentTransport` (defaulting to `DirectLLMTransport`) which yields
+ * events; this harness collects them, feeds them into the reducer, and
+ * exposes the projected state to the UI.
+ *
+ * `runCycle` is the legacy ReAct loop used by `agent-shell` and remains
+ * here for backward compatibility.
  */
 @Injectable({ providedIn: 'root' })
 export class AgentHarness {
@@ -84,11 +67,8 @@ export class AgentHarness {
   private readonly llm = inject(LLM_PROVIDER);
   private readonly codec = new ToolNameCodec();
   private readonly snapshotService = inject(StateSnapshotService);
-  private readonly approval = inject(AgentApprovalService);
-  private readonly interrupts = inject(InterruptRegistryService);
-
-  /** Approval tickets created during `runWithEvents`; resolved during `resume`. */
-  private readonly pendingApprovalPromises = new Map<string, Promise<boolean>>();
+  private readonly transport: AgentTransport =
+    inject(AGENT_TRANSPORT, { optional: true }) ?? inject(DirectLLMTransport);
 
   /** Transparent thought stream exposed to the UI. */
   readonly thought = signal<string>('');
@@ -143,7 +123,6 @@ export class AgentHarness {
     this.thought.set('');
     this.steps.set([]);
     this.chatTurns.set([]);
-    this.pendingApprovalPromises.clear();
     this.world.blur();
   }
 
@@ -383,22 +362,16 @@ export class AgentHarness {
   // ---- AG-UI Event Stream ----
 
   /**
-   * Run one LLM turn and return the AG-UI-shaped event stream for it.
-   *
-   * One-shot implementation (no ReAct loop yet): emits `RUN_STARTED`, streams
-   * `TEXT_MESSAGE_*` events for `content` and `thought` chunks, and for each
-   * tool call emits the `TOOL_CALL_*` quartet (`START`, `ARGS`, `END`,
-   * `RESULT`) with the action executed against the world. Always terminates
-   * with `RUN_FINISHED` (outcome `success` on completion, `error` on throw).
+   * Run one LLM turn via the configured `AgentTransport` and return the
+   * AG-UI-shaped event stream for it. The transport drives the loop
+   * (including interrupt flow); this method collects the events and
+   * dispatches each into the reducer-projected `state`.
    *
    * @returns A flat array of emitted events. The first event is `RUN_STARTED`
    *          and the last is always `RUN_FINISHED`.
    */
   async runWithEvents(userPrompt: string): Promise<AgentEvent[]> {
     const events: AgentEvent[] = [];
-    const threadId = crypto.randomUUID();
-    const runId = crypto.randomUUID();
-
     const record = (event: AgentEvent) => {
       events.push(event);
       this.dispatchEvent(event);
@@ -408,133 +381,36 @@ export class AgentHarness {
       this.messages.push({ role: 'user', content: userPrompt });
     }
 
-    record(runStarted({ threadId, runId }));
-
-    let previousState: Record<string, unknown> = {};
-    const initial = await this.snapshotService.snapshot();
-    previousState = initial.state;
-    record(stateSnapshot({ state: initial.state, truncated: initial.truncated }));
-
-    const stepName = 'reasoning';
-    try {
-      record(stepStarted({ stepName }));
-
-      const snapshot = this.world.snapshot();
-      const stream = this.llm.getStream(this.messages, snapshot.tools, this.systemPrompt, undefined);
-
-      const textDeltas: string[] = [];
-      const toolCalls: ToolCall[] = [];
-
-      for await (const chunk of stream) {
-        if ((chunk.type === 'content' || chunk.type === 'thought') && chunk.text) {
-          textDeltas.push(chunk.text);
-        } else if (chunk.type === 'tool_call' && chunk.data) {
-          toolCalls.push(chunk.data);
-        }
+    const threadId = crypto.randomUUID();
+    const runId = crypto.randomUUID();
+    const messages: MessagesSnapshotMessage[] = this.messages.map((m) => {
+      const msg: MessagesSnapshotMessage = {
+        id: m.tool_call_id ?? crypto.randomUUID(),
+        role: m.role,
+        content: m.content,
+      };
+      if (m.role === 'tool' && m.tool_call_id) {
+        msg.toolCallId = m.tool_call_id;
       }
+      return msg;
+    });
 
-      record(stepFinished({ stepName }));
-
-      if (textDeltas.length > 0) {
-        const messageId = crypto.randomUUID();
-        record(textMessageStart({ messageId, role: 'assistant' }));
-        for (const delta of textDeltas) {
-          record(textMessageContent({ messageId, delta }));
-        }
-        record(textMessageEnd({ messageId }));
-      }
-
-      if (toolCalls.length > 0) {
-        for (const toolCall of toolCalls) {
-          record(
-            toolCallStart({
-              toolCallId: toolCall.id,
-              toolCallName: toolCall.function.name,
-            }),
-          );
-          record(
-            toolCallArgs({
-              toolCallId: toolCall.id,
-              delta: toolCall.function.arguments,
-            }),
-          );
-          record(toolCallEnd({ toolCallId: toolCall.id }));
-
-          const { entryId, actionName } = this.codec.decodeAction(toolCall.function.name);
-          let args: Record<string, unknown> = {};
-          try {
-            args = JSON.parse(toolCall.function.arguments);
-          } catch {
-            /* arguments may be malformed */
-          }
-
-          const entry = this.world.entries().get(entryId);
-          const action = entry?.actions.find((a) => a.name === actionName);
-
-          if (action?.requiresApproval) {
-            const { id: ticketId, promise } = this.approval.requestApprovalTicket(
-              entryId,
-              entry?.role ?? '',
-              actionName,
-              action.description,
-              args,
-            );
-            this.pendingApprovalPromises.set(ticketId, promise);
-            const pendingInterrupt: PendingInterrupt = {
-              id: ticketId,
-              toolCallId: toolCall.id,
-              reason: 'approval_required',
-              entryId,
-              actionName,
-              params: args,
-            };
-            this.interrupts.register({ runId, interrupt: pendingInterrupt });
-            const runInterrupt: RunInterrupt = {
-              id: ticketId,
-              toolCallId: toolCall.id,
-              reason: 'approval_required',
-            };
-            record(
-              runFinished({
-                threadId,
-                runId,
-                outcome: 'interrupt',
-                interrupts: [runInterrupt],
-              }),
-            );
-            return events;
-          }
-
-          const result = await this.world.executeAction(entryId, actionName, args);
-
-          record(
-            toolCallResult({
-              toolCallId: toolCall.id,
-              content: result.message,
-              role: 'tool',
-            }),
-          );
-
-          const diff = await this.snapshotService.snapshotAndDiff(previousState);
-          previousState = diff.state;
-          record(stateDelta({ deltas: diff.deltas }));
-        }
-      }
-
-      record(runFinished({ threadId, runId, outcome: 'success' }));
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      record(stepFinished({ stepName }));
-      record(runError({ threadId, runId, message }));
-      record(runFinished({ threadId, runId, outcome: 'error' }));
+    for await (const event of this.transport.run({
+      threadId,
+      runId,
+      messages,
+      systemPrompt: this.systemPrompt,
+    })) {
+      record(event);
     }
 
     return events;
   }
 
   /**
-   * Resume a previously interrupted run by consuming pending interrupts
-   * and processing each resume decision.
+   * Resume a previously interrupted run by delegating to the transport's
+   * `resume` method. The transport consumes the pending interrupts and
+   * processes each resume decision.
    */
   async resume(input: AgentRunInput): Promise<AgentEvent[]> {
     const events: AgentEvent[] = [];
@@ -542,99 +418,15 @@ export class AgentHarness {
       events.push(event);
       this.dispatchEvent(event);
     };
-    const threadId = input.threadId;
-    const runId = input.runId;
-    const parentRunId = input.parentRunId;
 
     if (input.systemPrompt !== undefined) {
       this.systemPrompt = input.systemPrompt;
     }
 
-    record(runStarted({ threadId, runId, parentRunId }));
-
-    const decisions = input.resume ?? {};
-    const interruptIds = Object.keys(decisions);
-    const matched = this.interrupts.consume(parentRunId ?? runId, interruptIds);
-
-    let actionFailed = false;
-    for (const interrupt of matched) {
-      const decision = decisions[interrupt.id];
-      if (!decision) continue;
-
-      const toolName = `${interrupt.entryId}__action__${interrupt.actionName}`;
-      record(
-        toolCallStart({
-          toolCallId: interrupt.toolCallId,
-          toolCallName: toolName,
-        }),
-      );
-      record(
-        toolCallArgs({
-          toolCallId: interrupt.toolCallId,
-          delta: JSON.stringify(interrupt.params ?? {}),
-        }),
-      );
-      record(toolCallEnd({ toolCallId: interrupt.toolCallId }));
-
-      if (decision.decision === 'approved') {
-        const approvalPromise =
-          this.pendingApprovalPromises.get(interrupt.id) ?? Promise.resolve(true);
-        this.pendingApprovalPromises.delete(interrupt.id);
-        // Pre-resolve the approval ticket so the queue is drained even if
-        // the caller never invoked approval.approve()/reject().
-        this.approval.resolveById(interrupt.id, true);
-        const approved = await approvalPromise;
-        if (approved) {
-          const result = await this.executeApprovedAction(
-            interrupt.entryId,
-            interrupt.actionName,
-            interrupt.params,
-          );
-          record(
-            toolCallResult({
-              toolCallId: interrupt.toolCallId,
-              content: result.message,
-              role: 'tool',
-            }),
-          );
-          if (!result.success) actionFailed = true;
-        } else {
-          record(
-            toolCallResult({
-              toolCallId: interrupt.toolCallId,
-              content: 'Action rejected by user.',
-              role: 'tool',
-            }),
-          );
-        }
-      } else if (decision.decision === 'rejected') {
-        this.pendingApprovalPromises.delete(interrupt.id);
-        this.approval.resolveById(interrupt.id, false);
-        record(
-          toolCallResult({
-            toolCallId: interrupt.toolCallId,
-            content: decision.reason ?? 'Action rejected by user.',
-            role: 'tool',
-          }),
-        );
-      } else {
-        this.pendingApprovalPromises.delete(interrupt.id);
-        this.approval.resolveById(interrupt.id, false);
-        record(
-          toolCallResult({
-            toolCallId: interrupt.toolCallId,
-            content: JSON.stringify(decision.value ?? null),
-            role: 'tool',
-          }),
-        );
-      }
+    for await (const event of this.transport.resume(input)) {
+      record(event);
     }
 
-    if (actionFailed) {
-      record(runFinished({ threadId, runId, parentRunId, outcome: 'error' }));
-    } else {
-      record(runFinished({ threadId, runId, parentRunId, outcome: 'success' }));
-    }
     return events;
   }
 
@@ -650,35 +442,6 @@ export class AgentHarness {
       ]);
     } catch {
       // Stability timeout is non-fatal — proceed anyway
-    }
-  }
-
-  /**
-   * Execute an action whose approval has already been resolved by the
-   * caller (via the `resume` decision). Bypasses the world's approval gate
-   * because the resume payload IS the approval.
-   */
-  private async executeApprovedAction(
-    entryId: string,
-    actionName: string,
-    params: Record<string, unknown> | undefined,
-  ): Promise<{ success: boolean; message: string }> {
-    const entry = this.world.entries().get(entryId);
-    const action = entry?.actions.find((a) => a.name === actionName);
-    if (!entry || !action) {
-      return {
-        success: false,
-        message: `Action "${actionName}" not found on entry "${entryId}".`,
-      };
-    }
-    try {
-      return await action.execute(params);
-    } catch (error) {
-      return {
-        success: false,
-        message:
-          error instanceof Error ? error.message : String(error),
-      };
     }
   }
 }

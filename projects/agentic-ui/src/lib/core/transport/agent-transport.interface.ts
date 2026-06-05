@@ -3,4 +3,5 @@ import { AgentRunInput } from '../events/agent-run.model';
 
 export interface AgentTransport {
   run(input: AgentRunInput): AsyncIterable<AgentEvent>;
+  resume(input: AgentRunInput): AsyncIterable<AgentEvent>;
 }

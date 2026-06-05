@@ -17,12 +17,15 @@ import {
   toolCallArgs,
   toolCallEnd,
   toolCallResult,
+  stateSnapshot,
+  stateDelta,
 } from '../events/agent-event.model';
 import { reduceAgentTimeline } from '../reducer/agent-timeline-reducer';
 import {
   initialAgentTimelineState,
   type AgentTimelineState,
 } from '../reducer/agent-state.model';
+import { StateSnapshotService } from '../snapshot/state-snapshot.service';
 
 /** Single step result in the agent's reasoning chain. */
 export interface AgentStep {
@@ -73,6 +76,7 @@ export class AgentHarness {
   private readonly world = inject(AgentWorldService);
   private readonly llm = inject(LLM_PROVIDER);
   private readonly codec = new ToolNameCodec();
+  private readonly snapshotService = inject(StateSnapshotService);
 
   /** Transparent thought stream exposed to the UI. */
   readonly thought = signal<string>('');
@@ -389,6 +393,11 @@ export class AgentHarness {
 
     record(runStarted({ threadId, runId }));
 
+    let previousState: Record<string, unknown> = {};
+    const initial = await this.snapshotService.snapshot();
+    previousState = initial.state;
+    record(stateSnapshot({ state: initial.state, truncated: initial.truncated }));
+
     const stepName = 'reasoning';
     try {
       record(stepStarted({ stepName }));
@@ -450,6 +459,10 @@ export class AgentHarness {
               role: 'tool',
             }),
           );
+
+          const diff = await this.snapshotService.snapshotAndDiff(previousState);
+          previousState = diff.state;
+          record(stateDelta({ deltas: diff.deltas }));
         }
       }
 

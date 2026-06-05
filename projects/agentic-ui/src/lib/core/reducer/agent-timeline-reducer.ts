@@ -147,7 +147,9 @@ export function reduceAgentTimeline(
 
     case 'STEP_STARTED':
     case 'STEP_FINISHED':
-    case 'MESSAGES_SNAPSHOT': {
+    case 'MESSAGES_SNAPSHOT':
+    case 'STATE_SNAPSHOT':
+    case 'STATE_DELTA': {
       return state;
     }
   }

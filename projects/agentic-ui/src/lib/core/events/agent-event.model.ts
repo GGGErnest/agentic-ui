@@ -6,6 +6,8 @@
  * decision record (internal subset, no package dependency).
  */
 
+import type { JsonPatchOp } from '../snapshot/json-patch.model';
+
 export interface BaseEvent {
   type: string;
   timestamp: number;
@@ -111,6 +113,17 @@ export interface MessagesSnapshotEvent extends BaseEvent {
   messages: MessagesSnapshotMessage[];
 }
 
+export interface StateSnapshotEvent extends BaseEvent {
+  type: 'STATE_SNAPSHOT';
+  state: Record<string, unknown>;
+  truncated?: string[];
+}
+
+export interface StateDeltaEvent extends BaseEvent {
+  type: 'STATE_DELTA';
+  deltas: JsonPatchOp[];
+}
+
 export type AgentEvent =
   | RunStartedEvent
   | RunFinishedEvent
@@ -124,7 +137,9 @@ export type AgentEvent =
   | ToolCallArgsEvent
   | ToolCallEndEvent
   | ToolCallResultEvent
-  | MessagesSnapshotEvent;
+  | MessagesSnapshotEvent
+  | StateSnapshotEvent
+  | StateDeltaEvent;
 
 // ---- Factories ----
 
@@ -228,6 +243,17 @@ export function messagesSnapshot(input: {
   return { type: 'MESSAGES_SNAPSHOT', timestamp: now(), ...input };
 }
 
+export function stateSnapshot(input: {
+  state: Record<string, unknown>;
+  truncated?: string[];
+}): StateSnapshotEvent {
+  return { type: 'STATE_SNAPSHOT', timestamp: now(), ...input };
+}
+
+export function stateDelta(input: { deltas: JsonPatchOp[] }): StateDeltaEvent {
+  return { type: 'STATE_DELTA', timestamp: now(), ...input };
+}
+
 // ---- Guards ----
 
 export function isRunTerminal(
@@ -255,4 +281,10 @@ export function isToolEvent(
     event.type === 'TOOL_CALL_END' ||
     event.type === 'TOOL_CALL_RESULT'
   );
+}
+
+export function isStateEvent(
+  event: AgentEvent,
+): event is StateSnapshotEvent | StateDeltaEvent {
+  return event.type === 'STATE_SNAPSHOT' || event.type === 'STATE_DELTA';
 }

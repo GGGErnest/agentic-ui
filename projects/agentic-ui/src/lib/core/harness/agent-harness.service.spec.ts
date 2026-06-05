@@ -385,6 +385,40 @@ describe('AgentHarness', () => {
     });
   });
 
+  describe('snapshot/delta events', () => {
+    it('emits STATE_SNAPSHOT at the start of runWithEvents', async () => {
+      const counter = { v: 0 };
+      world.register({
+        id: 'c1',
+        role: 'X',
+        actions: [],
+        readables: [
+          {
+            name: 'counter',
+            description: 'c',
+            schema: { type: 'object', properties: {} },
+            read: vi.fn().mockImplementation(async () => ({
+              success: true,
+              message: 'ok',
+              value: { v: counter.v },
+            })),
+          },
+        ],
+      });
+
+      vi.mocked(mockLLM.getStream).mockReturnValueOnce(
+        new AsyncIterableChunks([{ type: 'content', text: 'done' }]),
+      );
+
+      const events = await harness.runWithEvents('hi');
+      const snap = events.find((e) => e.type === 'STATE_SNAPSHOT');
+      expect(snap).toBeDefined();
+      expect((snap as { state: Record<string, unknown> }).state['c1.counter']).toEqual({
+        v: 0,
+      });
+    });
+  });
+
   // ========== chatTurns ==========
 
   describe('chatTurns', () => {

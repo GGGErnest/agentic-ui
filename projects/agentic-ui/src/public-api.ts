@@ -63,6 +63,10 @@ export * from './lib/core/events';
 export { AgentApprovalService } from './lib/core/approval/agent-approval.service';
 export type { ApprovalTicket } from './lib/core/approval/agent-approval.service';
 
+// Core — Interrupt
+export { InterruptRegistryService } from './lib/core/interrupt/interrupt-registry.service';
+export type { PendingInterrupt } from './lib/core/interrupt/interrupt-registry.service';
+
 // Core — MCP Transport (types)
 export type {
   JsonRpcRequest,
@@ -89,6 +93,9 @@ export type { ReconnectState } from './lib/core/transport/websocket-transport.se
 
 // Core — Runtime
 export { RuntimeProxyService } from './lib/core/runtime/runtime-proxy.service';
+
+// Core — Generative
+export { AgentToolRendererComponent } from './lib/core/generative/agent-tool-renderer.component';
 
 // Core — Component Contract
 export type { AgenticComponent } from './lib/core/world/agentic-component.token';

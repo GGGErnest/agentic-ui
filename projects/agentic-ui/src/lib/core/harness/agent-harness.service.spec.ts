@@ -13,6 +13,7 @@ import { LLM_PROVIDER } from '../providers/llm-provider.token';
 import { AgentAction, AgentActionResult } from '../world/agent-action.model';
 import { WorldSnapshot } from '../world/world-entry.interface';
 import { AgentApprovalService } from '../approval/agent-approval.service';
+import { InterruptRegistryService } from '../interrupt/interrupt-registry.service';
 import { AgentEvent } from '../events/agent-event.model';
 import {
   runStarted,
@@ -958,4 +959,171 @@ describe('AgentHarness', () => {
       expect(steps[0].result).toContain('rejected');
     });
   });
+
+  // ========== Interrupt Flow ==========
+
+  describe('interrupt flow', () => {
+    it('emits RUN_FINISHED outcome=interrupt and registers a pending interrupt when an action requires approval', async () => {
+      const interrupts = TestBed.inject(InterruptRegistryService);
+
+      world.register({
+        id: 'del',
+        role: 'Button',
+        actions: [
+          {
+            name: 'rm',
+            description: 'rm',
+            requiresApproval: true,
+            execute: vi.fn().mockResolvedValue({ success: true, message: 'removed' }),
+          },
+        ],
+      });
+
+      vi.mocked(mockLLM.getStream).mockReturnValueOnce(
+        new AsyncIterableChunks([
+          {
+            type: 'tool_call',
+            data: { id: 'c1', function: { name: 'del__action__rm', arguments: '{}' } },
+          },
+        ]),
+      );
+
+      const events = await harness.runWithEvents('remove something');
+
+      const fin = events.find((e) => e.type === 'RUN_FINISHED') as
+        | {
+            outcome: 'success' | 'interrupt' | 'error';
+            runId: string;
+            interrupts?: { id: string; toolCallId: string; reason: string }[];
+          }
+        | undefined;
+      expect(fin).toBeDefined();
+      expect(fin?.outcome).toBe('interrupt');
+      expect(fin?.interrupts).toHaveLength(1);
+      expect(fin?.interrupts?.[0].toolCallId).toBe('c1');
+      expect(fin?.interrupts?.[0].reason).toBe('approval_required');
+
+      const pending = interrupts.pending(fin!.runId);
+      expect(pending).toHaveLength(1);
+      expect(pending[0].toolCallId).toBe('c1');
+      expect(pending[0].entryId).toBe('del');
+      expect(pending[0].actionName).toBe('rm');
+    });
+
+    it('does not call world.executeAction when an interrupt is emitted', async () => {
+      const execute = vi.fn().mockResolvedValue({ success: true, message: 'should not run' });
+      world.register({
+        id: 'del',
+        role: 'Button',
+        actions: [{ name: 'rm', description: 'rm', requiresApproval: true, execute }],
+      });
+
+      vi.mocked(mockLLM.getStream).mockReturnValueOnce(
+        new AsyncIterableChunks([
+          {
+            type: 'tool_call',
+            data: { id: 'c1', function: { name: 'del__action__rm', arguments: '{}' } },
+          },
+        ]),
+      );
+
+      await harness.runWithEvents('remove something');
+
+      expect(execute).not.toHaveBeenCalled();
+    });
+
+    it('emits TOOL_CALL_RESULT on resume with decision=approved', async () => {
+      const approval = TestBed.inject(AgentApprovalService);
+      const execute = vi.fn().mockResolvedValue({ success: true, message: 'ok' });
+      world.register({
+        id: 'del',
+        role: 'Button',
+        actions: [{ name: 'rm', description: 'rm', requiresApproval: true, execute }],
+      });
+
+      vi.mocked(mockLLM.getStream).mockReturnValueOnce(
+        new AsyncIterableChunks([
+          {
+            type: 'tool_call',
+            data: { id: 'c1', function: { name: 'del__action__rm', arguments: '{"x":1}' } },
+          },
+        ]),
+      );
+
+      const events = await harness.runWithEvents('remove something');
+      const fin = events.find((e) => e.type === 'RUN_FINISHED') as
+        | { outcome: string; runId: string; interrupts?: { id: string }[] }
+        | undefined;
+      expect(fin).toBeDefined();
+      const interruptId = fin!.interrupts![0].id;
+
+      // Pre-approve the next ticket so resume() does not hang.
+      queueMicrotask(() => approval.approve());
+
+      const resumed = await harness.resume({
+        threadId: 't',
+        runId: 'r-new',
+        parentRunId: fin!.runId,
+        messages: [],
+        resume: { [interruptId]: { decision: 'approved' } },
+      });
+
+      const result = resumed.find((e) => e.type === 'TOOL_CALL_RESULT') as
+        | { toolCallId: string; content: string }
+        | undefined;
+      expect(result).toBeDefined();
+      expect(result?.toolCallId).toBe('c1');
+      expect(result?.content).toBe('ok');
+      expect(execute).toHaveBeenCalled();
+      expect(executedWithArgs(execute)).toEqual({ x: 1 });
+      expect(resumed.at(-1)?.type).toBe('RUN_FINISHED');
+      expect((resumed.at(-1) as { outcome?: string } | undefined)?.outcome).toBe('success');
+    });
+
+    it('emits a rejected tool call result and skips executeAction on decision=rejected', async () => {
+      const approval = TestBed.inject(AgentApprovalService);
+      const execute = vi.fn().mockResolvedValue({ success: true, message: 'should not run' });
+      world.register({
+        id: 'del',
+        role: 'Button',
+        actions: [{ name: 'rm', description: 'rm', requiresApproval: true, execute }],
+      });
+
+      vi.mocked(mockLLM.getStream).mockReturnValueOnce(
+        new AsyncIterableChunks([
+          {
+            type: 'tool_call',
+            data: { id: 'c1', function: { name: 'del__action__rm', arguments: '{}' } },
+          },
+        ]),
+      );
+
+      const events = await harness.runWithEvents('remove something');
+      const fin = events.find((e) => e.type === 'RUN_FINISHED') as
+        | { runId: string; interrupts?: { id: string }[] }
+        | undefined;
+      const interruptId = fin!.interrupts![0].id;
+
+      queueMicrotask(() => approval.reject());
+
+      const resumed = await harness.resume({
+        threadId: 't',
+        runId: 'r-new',
+        parentRunId: fin!.runId,
+        messages: [],
+        resume: { [interruptId]: { decision: 'rejected' } },
+      });
+
+      const result = resumed.find((e) => e.type === 'TOOL_CALL_RESULT') as
+        | { content: string }
+        | undefined;
+      expect(result?.content).toContain('rejected');
+      expect(execute).not.toHaveBeenCalled();
+    });
+  });
 });
+
+function executedWithArgs(mock: ReturnType<typeof vi.fn>): unknown {
+  const calls = mock.mock.calls as unknown[][];
+  return calls[0]?.[0];
+}

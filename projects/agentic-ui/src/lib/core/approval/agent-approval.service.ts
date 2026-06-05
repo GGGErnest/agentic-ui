@@ -52,6 +52,45 @@ export class AgentApprovalService {
     });
   }
 
+  /**
+   * Ticket-id variant used by the resumable interrupt flow.
+   * Returns the ticket id alongside its resolution promise so callers
+   * (the harness) can correlate the ticket with a `PendingInterrupt`.
+   */
+  requestApprovalTicket(
+    entryId: string,
+    entryRole: string,
+    actionName: string,
+    actionDescription: string,
+    params?: Record<string, unknown>,
+  ): { id: string; promise: Promise<boolean> } {
+    let resolveTicket!: (approved: boolean) => void;
+    const promise = new Promise<boolean>((resolve) => {
+      resolveTicket = resolve;
+    });
+    const ticket: ApprovalTicket = {
+      id: crypto.randomUUID(),
+      entryId,
+      entryRole,
+      actionName,
+      actionDescription,
+      params,
+      resolve: resolveTicket,
+    };
+    this.queue.update((items) => [...items, ticket]);
+    return { id: ticket.id, promise };
+  }
+
+  /** Resolve the ticket with the given id. No-op if not found. */
+  resolveById(ticketId: string, approved: boolean): void {
+    const items = this.queue();
+    const idx = items.findIndex((t) => t.id === ticketId);
+    if (idx === -1) return;
+    const ticket = items[idx];
+    ticket.resolve(approved);
+    this.queue.update((list) => list.filter((_, i) => i !== idx));
+  }
+
   /** User approved the current ticket. */
   approve(): void {
     this.resolveCurrent(true, 'Action approved by user.');
@@ -65,10 +104,10 @@ export class AgentApprovalService {
   private resolveCurrent(approved: boolean, message: string): void {
     const items = this.queue();
     if (items.length === 0) return;
-    
+
     const ticket = items[0];
     ticket.resolve(approved);
-    
+
     // Shift queue forward to resolve memory leakage and blockages
     this.queue.update(list => list.slice(1));
   }

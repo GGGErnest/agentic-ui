@@ -130,4 +130,54 @@ describe('AgentApprovalService', () => {
       await promise;
     });
   });
+
+  // ========== Ticket-Id API (interrupt flow) ==========
+
+  describe('requestApprovalTicket', () => {
+    it('returns the ticket id alongside the promise', () => {
+      const ticket = service.requestApprovalTicket('btn', 'Button', 'click', 'Click');
+
+      expect(ticket.id).toEqual(expect.any(String));
+      expect(service.pending()?.id).toBe(ticket.id);
+    });
+
+    it('resolves the matching ticket when resolveById is called', async () => {
+      const a = service.requestApprovalTicket('a', 'A', 'x', 'X');
+      const b = service.requestApprovalTicket('b', 'B', 'y', 'Y');
+
+      let bDone = false;
+      void b.promise.then(() => {
+        bDone = true;
+      });
+
+      service.resolveById(a.id, true);
+      const aResult = await a.promise;
+      expect(aResult).toBe(true);
+
+      service.resolveById(b.id, false);
+      const bResult = await b.promise;
+      expect(bDone).toBe(true);
+      expect(bResult).toBe(false);
+    });
+
+    it('resolves with false when resolveById receives false', async () => {
+      const t = service.requestApprovalTicket('btn', 'Button', 'del', 'Delete');
+      service.resolveById(t.id, false);
+      expect(await t.promise).toBe(false);
+    });
+
+    it('removes the ticket from the queue once resolved', () => {
+      const t = service.requestApprovalTicket('btn', 'Button', 'click', 'Click');
+      service.resolveById(t.id, true);
+      expect(service.pending()).toBeNull();
+      expect(service.isPending()).toBe(false);
+    });
+
+    it('no-ops when called with an unknown id', () => {
+      const t = service.requestApprovalTicket('btn', 'Button', 'click', 'Click');
+      service.resolveById('not-a-real-id', true);
+      expect(service.pending()?.id).toBe(t.id);
+      service.resolveById(t.id, true);
+    });
+  });
 });

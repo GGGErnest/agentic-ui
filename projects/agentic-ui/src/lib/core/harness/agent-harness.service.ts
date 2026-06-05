@@ -19,6 +19,7 @@ import {
   toolCallResult,
   stateSnapshot,
   stateDelta,
+  type RunInterrupt,
 } from '../events/agent-event.model';
 import { reduceAgentTimeline } from '../reducer/agent-timeline-reducer';
 import {
@@ -26,6 +27,12 @@ import {
   type AgentTimelineState,
 } from '../reducer/agent-state.model';
 import { StateSnapshotService } from '../snapshot/state-snapshot.service';
+import { AgentApprovalService } from '../approval/agent-approval.service';
+import {
+  InterruptRegistryService,
+  type PendingInterrupt,
+} from '../interrupt/interrupt-registry.service';
+import type { AgentRunInput } from '../events/agent-run.model';
 
 /** Single step result in the agent's reasoning chain. */
 export interface AgentStep {
@@ -77,6 +84,11 @@ export class AgentHarness {
   private readonly llm = inject(LLM_PROVIDER);
   private readonly codec = new ToolNameCodec();
   private readonly snapshotService = inject(StateSnapshotService);
+  private readonly approval = inject(AgentApprovalService);
+  private readonly interrupts = inject(InterruptRegistryService);
+
+  /** Approval tickets created during `runWithEvents`; resolved during `resume`. */
+  private readonly pendingApprovalPromises = new Map<string, Promise<boolean>>();
 
   /** Transparent thought stream exposed to the UI. */
   readonly thought = signal<string>('');
@@ -450,6 +462,45 @@ export class AgentHarness {
           } catch {
             /* arguments may be malformed */
           }
+
+          const action = this.world.entries().get(entryId)?.actions.find(
+            (a) => a.name === actionName,
+          );
+
+          if (action?.requiresApproval) {
+            const { id: ticketId, promise } = this.approval.requestApprovalTicket(
+              entryId,
+              this.world.entries().get(entryId)?.role ?? '',
+              actionName,
+              action.description,
+              args,
+            );
+            this.pendingApprovalPromises.set(ticketId, promise);
+            const pendingInterrupt: PendingInterrupt = {
+              id: ticketId,
+              toolCallId: toolCall.id,
+              reason: 'approval_required',
+              entryId,
+              actionName,
+              params: args,
+            };
+            this.interrupts.register({ runId, interrupt: pendingInterrupt });
+            const runInterrupt: RunInterrupt = {
+              id: ticketId,
+              toolCallId: toolCall.id,
+              reason: 'approval_required',
+            };
+            record(
+              runFinished({
+                threadId,
+                runId,
+                outcome: 'interrupt',
+                interrupts: [runInterrupt],
+              }),
+            );
+            return events;
+          }
+
           const result = await this.world.executeAction(entryId, actionName, args);
 
           record(
@@ -477,6 +528,93 @@ export class AgentHarness {
     return events;
   }
 
+  /**
+   * Resume a previously interrupted run by consuming pending interrupts
+   * and processing each resume decision.
+   */
+  async resume(input: AgentRunInput): Promise<AgentEvent[]> {
+    const events: AgentEvent[] = [];
+    const threadId = input.threadId;
+    const runId = input.runId;
+    const parentRunId = input.parentRunId;
+
+    if (input.systemPrompt !== undefined) {
+      this.systemPrompt = input.systemPrompt;
+    }
+
+    const decisions = input.resume ?? {};
+    const interruptIds = Object.keys(decisions);
+    const matched = this.interrupts.consume(parentRunId ?? runId, interruptIds);
+
+    for (const interrupt of matched) {
+      const decision = decisions[interrupt.id];
+      if (!decision) continue;
+
+      const toolName = `${interrupt.entryId}__action__${interrupt.actionName}`;
+      events.push(
+        toolCallStart({
+          toolCallId: interrupt.toolCallId,
+          toolCallName: toolName,
+        }),
+        toolCallArgs({
+          toolCallId: interrupt.toolCallId,
+          delta: JSON.stringify(interrupt.params ?? {}),
+        }),
+        toolCallEnd({ toolCallId: interrupt.toolCallId }),
+      );
+
+      if (decision.decision === 'approved') {
+        const approvalPromise =
+          this.pendingApprovalPromises.get(interrupt.id) ?? Promise.resolve(true);
+        this.pendingApprovalPromises.delete(interrupt.id);
+        const approved = await approvalPromise;
+        if (approved) {
+          const result = await this.executeApprovedAction(
+            interrupt.entryId,
+            interrupt.actionName,
+            interrupt.params,
+          );
+          events.push(
+            toolCallResult({
+              toolCallId: interrupt.toolCallId,
+              content: result.message,
+              role: 'tool',
+            }),
+          );
+        } else {
+          events.push(
+            toolCallResult({
+              toolCallId: interrupt.toolCallId,
+              content: 'Action rejected by user.',
+              role: 'tool',
+            }),
+          );
+        }
+      } else if (decision.decision === 'rejected') {
+        this.pendingApprovalPromises.delete(interrupt.id);
+        events.push(
+          toolCallResult({
+            toolCallId: interrupt.toolCallId,
+            content: decision.reason ?? 'Action rejected by user.',
+            role: 'tool',
+          }),
+        );
+      } else {
+        this.pendingApprovalPromises.delete(interrupt.id);
+        events.push(
+          toolCallResult({
+            toolCallId: interrupt.toolCallId,
+            content: JSON.stringify(decision.value ?? null),
+            role: 'tool',
+          }),
+        );
+      }
+    }
+
+    events.push(runFinished({ threadId, runId, outcome: 'success' }));
+    return events;
+  }
+
   // ---- Stability (with timeout) ----
 
   private async waitForStableWithTimeout(timeoutMs: number): Promise<void> {
@@ -489,6 +627,35 @@ export class AgentHarness {
       ]);
     } catch {
       // Stability timeout is non-fatal — proceed anyway
+    }
+  }
+
+  /**
+   * Execute an action whose approval has already been resolved by the
+   * caller (via the `resume` decision). Bypasses the world's approval gate
+   * because the resume payload IS the approval.
+   */
+  private async executeApprovedAction(
+    entryId: string,
+    actionName: string,
+    params: Record<string, unknown> | undefined,
+  ): Promise<{ success: boolean; message: string }> {
+    const entry = this.world.entries().get(entryId);
+    const action = entry?.actions.find((a) => a.name === actionName);
+    if (!entry || !action) {
+      return {
+        success: false,
+        message: `Action "${actionName}" not found on entry "${entryId}".`,
+      };
+    }
+    try {
+      return await action.execute(params);
+    } catch (error) {
+      return {
+        success: false,
+        message:
+          error instanceof Error ? error.message : String(error),
+      };
     }
   }
 }

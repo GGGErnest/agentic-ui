@@ -163,6 +163,24 @@ describe('AgentHarness', () => {
       vi.useRealTimers();
     });
 
+    it('does not leak abort listeners on the external signal across cycles (#6)', async () => {
+      vi.mocked(mockLLM.getStream).mockReturnValue(
+        new AsyncIterableChunks([{ type: 'content', text: 'done' }]),
+      );
+
+      const controller = new AbortController();
+      const addSpy = vi.spyOn(controller.signal, 'addEventListener');
+      const removeSpy = vi.spyOn(controller.signal, 'removeEventListener');
+
+      // Three sequential cycles sharing one long-lived signal.
+      await harness.runCycle('one', { signal: controller.signal });
+      await harness.runCycle('two', { signal: controller.signal });
+      await harness.runCycle('three', { signal: controller.signal });
+
+      // Every listener added for a cycle must be removed (no accumulation).
+      expect(addSpy.mock.calls.length).toBe(removeSpy.mock.calls.length);
+    });
+
     it('should accumulate thought tokens in the signal', async () => {
       vi.mocked(mockLLM.getStream).mockReturnValue(
         new AsyncIterableChunks([
@@ -227,9 +245,10 @@ describe('AgentHarness', () => {
       const start = events.find((e) => e.type === 'TEXT_MESSAGE_START') as
         | { type: 'TEXT_MESSAGE_START'; messageId: string }
         | undefined;
-      const contents = events.filter(
-        (e) => e.type === 'TEXT_MESSAGE_CONTENT',
-      ) as { type: 'TEXT_MESSAGE_CONTENT'; messageId: string }[];
+      const contents = events.filter((e) => e.type === 'TEXT_MESSAGE_CONTENT') as {
+        type: 'TEXT_MESSAGE_CONTENT';
+        messageId: string;
+      }[];
       const end = events.find((e) => e.type === 'TEXT_MESSAGE_END') as
         | { type: 'TEXT_MESSAGE_END'; messageId: string }
         | undefined;
@@ -253,15 +272,18 @@ describe('AgentHarness', () => {
         ],
       });
 
-      vi.mocked(mockLLM.getStream).mockReturnValueOnce(
-        new AsyncIterableChunks([
-          { type: 'thought', text: 'Deleting' },
-          {
-            type: 'tool_call',
-            data: { id: 'c1', function: { name: 'tbl__action__del', arguments: '{}' } },
-          },
-        ]),
-      );
+      vi.mocked(mockLLM.getStream)
+        .mockReturnValueOnce(
+          new AsyncIterableChunks([
+            { type: 'thought', text: 'Deleting' },
+            {
+              type: 'tool_call',
+              data: { id: 'c1', function: { name: 'tbl__action__del', arguments: '{}' } },
+            },
+          ]),
+        )
+        // Second turn observes the result and settles with no further tool calls.
+        .mockReturnValue(new AsyncIterableChunks([{ type: 'content', text: 'Done.' }]));
 
       const events = await harness.runWithEvents('delete something');
 
@@ -357,19 +379,11 @@ describe('AgentHarness', () => {
     });
 
     it('updates the state computed when dispatchEvent feeds events', () => {
-      harness.dispatchEvent(
-        runStarted({ threadId: 't1', runId: 'r1' }),
-      );
-      harness.dispatchEvent(
-        textMessageStart({ messageId: 'm1', role: 'assistant' }),
-      );
-      harness.dispatchEvent(
-        textMessageContent({ messageId: 'm1', delta: 'hi' }),
-      );
+      harness.dispatchEvent(runStarted({ threadId: 't1', runId: 'r1' }));
+      harness.dispatchEvent(textMessageStart({ messageId: 'm1', role: 'assistant' }));
+      harness.dispatchEvent(textMessageContent({ messageId: 'm1', delta: 'hi' }));
       harness.dispatchEvent(textMessageEnd({ messageId: 'm1' }));
-      harness.dispatchEvent(
-        runFinished({ threadId: 't1', runId: 'r1', outcome: 'success' }),
-      );
+      harness.dispatchEvent(runFinished({ threadId: 't1', runId: 'r1', outcome: 'success' }));
 
       const state = harness.state();
       expect(state.run.status).toBe('finished');
@@ -552,6 +566,52 @@ describe('AgentHarness', () => {
       expect(steps[1].result).toContain('No action taken');
     });
 
+    it('should dispatch writable readable tool calls to the World Registry', async () => {
+      const writeSpy = vi.fn().mockResolvedValue({ success: true, message: 'Config updated' });
+
+      world.register({
+        id: 'settings-panel',
+        role: 'Panel',
+        actions: [],
+        readables: [
+          {
+            name: 'config',
+            description: 'Configuration',
+            schema: { type: 'object', properties: { value: { type: 'string' } } },
+            writable: true,
+            read: vi.fn().mockResolvedValue({ success: true, message: 'ok', value: 'old' }),
+            write: writeSpy,
+          },
+        ],
+      });
+
+      vi.mocked(mockLLM.getStream)
+        .mockImplementationOnce(
+          () =>
+            new AsyncIterableChunks([
+              { type: 'thought', text: 'Updating config...' },
+              {
+                type: 'tool_call',
+                data: {
+                  id: 'call_1',
+                  function: {
+                    name: 'settings-panel__write__config',
+                    arguments: '{"value":"new-value"}',
+                  },
+                },
+              },
+            ]),
+        )
+        .mockImplementation(
+          () => new AsyncIterableChunks([{ type: 'thought', text: 'No more actions.' }]),
+        );
+
+      await harness.runCycle('Set config to new-value');
+
+      expect(writeSpy).toHaveBeenCalledWith('new-value');
+      expect(harness.steps()[0].result).toContain('Config updated');
+    });
+
     it('should dispatch multiple tool calls in sequence', async () => {
       const executeClick = vi.fn().mockResolvedValue({ success: true, message: 'Clicked' });
       world.register({
@@ -617,7 +677,10 @@ describe('AgentHarness', () => {
             new AsyncIterableChunks([
               {
                 type: 'tool_call',
-                data: { id: 'call_1', function: { name: 'add-btn__action__addTask', arguments: '{}' } },
+                data: {
+                  id: 'call_1',
+                  function: { name: 'add-btn__action__addTask', arguments: '{}' },
+                },
               },
               {
                 type: 'tool_call',
@@ -1170,7 +1233,7 @@ describe('AgentHarness', () => {
       expect(result?.content).toBe(JSON.stringify({ reason: 'user typed it' }));
     });
 
-    it('emits a successful RUN_FINISHED when no matching interrupts are found', async () => {
+    it('emits RUN_ERROR + error RUN_FINISHED when decisions match no pending interrupt (#8)', async () => {
       const resumed = await harness.resume({
         threadId: 't',
         runId: 'r-new',
@@ -1180,8 +1243,9 @@ describe('AgentHarness', () => {
       });
 
       expect(resumed.at(0)?.type).toBe('RUN_STARTED');
+      expect(resumed.some((e) => e.type === 'RUN_ERROR')).toBe(true);
       expect(resumed.at(-1)?.type).toBe('RUN_FINISHED');
-      expect((resumed.at(-1) as { outcome?: string } | undefined)?.outcome).toBe('success');
+      expect((resumed.at(-1) as { outcome?: string } | undefined)?.outcome).toBe('error');
     });
   });
 });

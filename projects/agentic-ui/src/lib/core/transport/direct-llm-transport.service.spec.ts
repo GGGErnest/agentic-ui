@@ -88,6 +88,102 @@ describe('DirectLLMTransport', () => {
     expect(events).toContain('TOOL_CALL_RESULT');
   });
 
+  it('loops multiple turns until the model emits no tool calls (#7)', async () => {
+    const execute = vi.fn().mockResolvedValue({ success: true, message: 'ok' });
+    world.register({
+      id: 'btn',
+      role: 'B',
+      actions: [{ name: 'click', description: 'c', execute }],
+    });
+
+    // Turn 1 and 2 each emit a tool call; turn 3 settles with text only.
+    vi.mocked(mockLLM.getStream)
+      .mockReturnValueOnce(
+        new AsyncChunks([
+          {
+            type: 'tool_call',
+            data: { id: 'c1', function: { name: 'btn__action__click', arguments: '{}' } },
+          },
+        ]),
+      )
+      .mockReturnValueOnce(
+        new AsyncChunks([
+          {
+            type: 'tool_call',
+            data: { id: 'c2', function: { name: 'btn__action__click', arguments: '{}' } },
+          },
+        ]),
+      )
+      .mockReturnValue(new AsyncChunks([{ type: 'content', text: 'all done' }]));
+
+    const events: AgentEvent[] = [];
+    for await (const e of transport.run({
+      threadId: 't',
+      runId: 'r',
+      messages: [{ id: 'm1', role: 'user', content: 'go' }],
+    })) {
+      events.push(e);
+    }
+
+    // Executed once per tool-emitting turn.
+    expect(execute).toHaveBeenCalledTimes(2);
+    // Three reasoning turns -> three STEP_STARTED.
+    expect(events.filter((e) => e.type === 'STEP_STARTED')).toHaveLength(3);
+    const fin = events.at(-1) as { type: string; outcome?: string };
+    expect(fin.type).toBe('RUN_FINISHED');
+    expect(fin.outcome).toBe('success');
+  });
+
+  it('dispatches writable readable tools through updateReadable', async () => {
+    const writeSpy = vi.fn().mockResolvedValue({ success: true, message: 'Config updated' });
+    world.register({
+      id: 'settings-panel',
+      role: 'Panel',
+      actions: [],
+      readables: [
+        {
+          name: 'config',
+          description: 'Configuration',
+          schema: { type: 'object', properties: { value: { type: 'string' } } },
+          writable: true,
+          read: vi.fn().mockResolvedValue({ success: true, message: 'ok', value: 'old' }),
+          write: writeSpy,
+        },
+      ],
+    });
+    vi.mocked(mockLLM.getStream)
+      .mockImplementationOnce(
+        () =>
+          new AsyncChunks([
+            {
+              type: 'tool_call',
+              data: {
+                id: 'c1',
+                function: {
+                  name: 'settings-panel__write__config',
+                  arguments: '{"value":"new-value"}',
+                },
+              },
+            },
+          ]),
+      )
+      .mockImplementation(() => new AsyncChunks([{ type: 'content', text: 'done' }]));
+
+    const results: string[] = [];
+    for await (const e of transport.run({
+      threadId: 't',
+      runId: 'r',
+      messages: [{ id: 'm1', role: 'user', content: 'go' }],
+    })) {
+      if (e.type === 'TOOL_CALL_RESULT') {
+        results.push((e as { content: string }).content);
+      }
+    }
+
+    expect(writeSpy).toHaveBeenCalledWith('new-value');
+    expect(results).toContain('Config updated');
+  });
+
   describe('resume()', () => {
     it('emits TOOL_CALL_START/ARGS/END/RESULT and RUN_FINISHED success on decision=approved', async () => {
       const approval = TestBed.inject(AgentApprovalService);
@@ -196,6 +292,96 @@ describe('DirectLLMTransport', () => {
       expect(toolResult?.content).toBe('nope');
       expect(resumeEvents).toContain('TOOL_CALL_RESULT');
       expect(resumeEvents[resumeEvents.length - 1]).toBe('RUN_FINISHED');
+    });
+
+    it('emits RUN_ERROR + error RUN_FINISHED when no interrupt matches the decisions (#8)', async () => {
+      const events: AgentEvent[] = [];
+      for await (const e of transport.resume({
+        threadId: 't',
+        runId: 'r2',
+        parentRunId: 'r-does-not-exist',
+        messages: [],
+        resume: { 'ticket-missing': { decision: 'approved' } },
+      })) {
+        events.push(e);
+      }
+
+      expect(events.some((e) => e.type === 'RUN_ERROR')).toBe(true);
+      const fin = events.at(-1) as { type: string; outcome?: string } | undefined;
+      expect(fin?.type).toBe('RUN_FINISHED');
+      expect(fin?.outcome).toBe('error');
+    });
+
+    it('isolates approval promises per runId so concurrent runs do not collide (#11)', async () => {
+      const approval = TestBed.inject(AgentApprovalService);
+      const execute = vi.fn().mockResolvedValue({ success: true, message: 'ok' });
+      world.register({
+        id: 'btn',
+        role: 'B',
+        actions: [{ name: 'click', description: 'c', requiresApproval: true, execute }],
+      });
+
+      // Two independent runs each produce their own interrupt.
+      const startRun = async (runId: string) => {
+        vi.mocked(mockLLM.getStream).mockReturnValueOnce(
+          new AsyncChunks([
+            {
+              type: 'tool_call',
+              data: {
+                id: `tc-${runId}`,
+                function: { name: 'btn__action__click', arguments: '{}' },
+              },
+            },
+          ]),
+        );
+        const evs: AgentEvent[] = [];
+        for await (const e of transport.run({
+          threadId: 't',
+          runId,
+          messages: [{ id: 'm', role: 'user', content: 'go' }],
+        })) {
+          evs.push(e);
+        }
+        const fin = evs.find((e) => e.type === 'RUN_FINISHED') as
+          | { interrupts?: { id: string }[] }
+          | undefined;
+        return fin?.interrupts?.[0]?.id as string;
+      };
+
+      const ticketA = await startRun('run-A');
+      const ticketB = await startRun('run-B');
+      expect(ticketA).toBeDefined();
+      expect(ticketB).toBeDefined();
+
+      // Resume run-A only; run-B's pending promise must remain untouched.
+      queueMicrotask(() => approval.resolveById(ticketA, true));
+      const resumeA: string[] = [];
+      for await (const e of transport.resume({
+        threadId: 't',
+        runId: 'run-A2',
+        parentRunId: 'run-A',
+        messages: [],
+        resume: { [ticketA]: { decision: 'approved' } },
+      })) {
+        resumeA.push(e.type);
+      }
+      expect(resumeA.at(-1)).toBe('RUN_FINISHED');
+      expect(execute).toHaveBeenCalledTimes(1);
+
+      // run-B still resolvable independently.
+      queueMicrotask(() => approval.resolveById(ticketB, true));
+      const resumeB: string[] = [];
+      for await (const e of transport.resume({
+        threadId: 't',
+        runId: 'run-B2',
+        parentRunId: 'run-B',
+        messages: [],
+        resume: { [ticketB]: { decision: 'approved' } },
+      })) {
+        resumeB.push(e.type);
+      }
+      expect(resumeB.at(-1)).toBe('RUN_FINISHED');
+      expect(execute).toHaveBeenCalledTimes(2);
     });
   });
 });

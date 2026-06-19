@@ -1,3 +1,4 @@
+import { isDevMode } from '@angular/core';
 import { LLMMessage, LLMProvider, LLMStreamChunk } from '../../core/harness/llm-provider.interface';
 import { ToolDefinition } from '../../core/world/world-entry.interface';
 
@@ -41,6 +42,9 @@ export interface OpenAiProviderConfig {
  * server-side or local development usage only.
  */
 export class OpenAiProvider implements LLMProvider {
+  /** Ensures the browser-key warning is emitted at most once per session. */
+  private static warnedBrowserKey = false;
+
   private readonly apiUrl: string;
   private readonly apiKey: string;
   private readonly model: string;
@@ -53,6 +57,22 @@ export class OpenAiProvider implements LLMProvider {
     this.model = config.model ?? 'gpt-4o';
     this.maxTokens = config.maxTokens ?? 4096;
     this.temperature = config.temperature ?? 0.1;
+
+    // Guardrail: warn (once, in dev) if an API key is being used directly in a
+    // browser context. The easy path should not silently become the insecure one.
+    if (
+      config.apiKey &&
+      typeof window !== 'undefined' &&
+      isDevMode() &&
+      !OpenAiProvider.warnedBrowserKey
+    ) {
+      OpenAiProvider.warnedBrowserKey = true;
+      console.warn(
+        '[Agentic-UI] OpenAiProvider was constructed with an API key in a browser context. ' +
+          'The key will be exposed to end users. Use a server proxy (AgUiHttpTransport) or ' +
+          'RuntimeProxyService for production deployments.',
+      );
+    }
   }
 
   async *getStream(

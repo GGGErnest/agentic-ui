@@ -5,10 +5,7 @@ import { LLM_PROVIDER } from '../providers/llm-provider.token';
 import { ToolNameCodec } from '../events/tool-name-codec';
 import { AgentEvent, type MessagesSnapshotMessage } from '../events/agent-event.model';
 import { reduceAgentTimeline } from '../reducer/agent-timeline-reducer';
-import {
-  initialAgentTimelineState,
-  type AgentTimelineState,
-} from '../reducer/agent-state.model';
+import { initialAgentTimelineState, type AgentTimelineState } from '../reducer/agent-state.model';
 import { StateSnapshotService } from '../snapshot/state-snapshot.service';
 import { AGENT_TRANSPORT } from '../transport/agent-transport.token';
 import { AgentTransport } from '../transport/agent-transport.interface';
@@ -223,8 +220,13 @@ export class AgentHarness {
 
         // Per-call AbortController (merged with external signal if provided)
         const abort = new AbortController();
+        const onExternalAbort = () => abort.abort();
         if (config.signal) {
-          config.signal.addEventListener('abort', () => abort.abort());
+          if (config.signal.aborted) {
+            abort.abort();
+          } else {
+            config.signal.addEventListener('abort', onExternalAbort);
+          }
         }
         const timer = setTimeout(() => abort.abort(), timeoutMs);
 
@@ -254,6 +256,9 @@ export class AgentHarness {
           }
         } finally {
           clearTimeout(timer);
+          // Detach the per-cycle listener so repeated cycles never accumulate
+          // handlers on a long-lived external AbortSignal.
+          config.signal?.removeEventListener('abort', onExternalAbort);
         }
 
         if (abort.signal.aborted) {
@@ -286,7 +291,7 @@ export class AgentHarness {
           // Optimized check timeout threshold from 5s down to 500ms to ignore websocket / polling blocks
           await this.waitForStableWithTimeout(500);
 
-          const { entryId, actionName } = this.codec.decodeAction(toolCall.function.name);
+          const toolKind = this.codec.kind(toolCall.function.name);
           let args: Record<string, unknown> = {};
           try {
             args = JSON.parse(toolCall.function.arguments);
@@ -294,21 +299,37 @@ export class AgentHarness {
             /* arguments may be malformed */
           }
 
-          let result = await this.world.executeAction(entryId, actionName, args);
+          let result: { success: boolean; message: string };
+          let toolLabel = toolCall.function.name;
 
-          // Self-correcting reflective parsing logic: if the component action failed,
-          // format the content payload to demand correction from the model on the next turn
+          if (toolKind === 'action') {
+            const { entryId, actionName } = this.codec.decodeAction(toolCall.function.name);
+            toolLabel = actionName;
+            result = await this.world.executeAction(entryId, actionName, args);
+          } else if (toolKind === 'write') {
+            const { entryId, readableName } = this.codec.decodeReadable(toolCall.function.name);
+            toolLabel = readableName;
+            result = await this.world.updateReadable(entryId, readableName, args['value']);
+          } else {
+            result = {
+              success: false,
+              message: `Unsupported tool name "${toolCall.function.name}".`,
+            };
+          }
+
+          // If the action failed, forward a concise correction hint so the model can
+          // retry on the next turn without burning tokens on boilerplate.
           if (!result.success) {
             result = {
               ...result,
-              message: `[EXECUTION CRITICAL FAILURE] Action failed validation rules. Reason: "${result.message}". Correction Guidance: Inspect your parameters layout, verify object identifiers match existing dataset snapshots exactly, and invoke the corrected call structure during the next action turn.`,
+              message: `Action failed: ${result.message}. Fix the parameters and retry.`,
             };
           }
 
           // Record the step
           this.appendStepToCurrentTurn({
             thought: thoughtText,
-            action: `${actionName}(${JSON.stringify(args)})`,
+            action: `${toolLabel}(${JSON.stringify(args)})`,
             result: result.message,
             timestamp: Date.now(),
           });

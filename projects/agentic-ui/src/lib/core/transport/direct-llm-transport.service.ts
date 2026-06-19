@@ -38,6 +38,12 @@ import type { AgentRunInput, ResumeDecision } from '../events/agent-run.model';
  * log; the caller (AgentHarness) wires the event stream into the timeline
  * reducer and persists messages.
  *
+ * `run` performs a multi-turn ReAct loop: it re-snapshots the world each turn,
+ * dispatches the model's tool calls, feeds the results back as `tool` messages,
+ * and loops until the model emits no tool calls or the cycle cap is reached.
+ * This matches `AgentHarness.runCycle` semantics so `runWithEvents` and
+ * `runCycle` behave consistently.
+ *
  * Handles the full loop including the resumable interrupt flow:
  * - `run` streams LLM output, dispatches tool calls, and emits
  *   `RUN_FINISHED outcome='interrupt'` when an action requires approval,
@@ -54,8 +60,38 @@ export class DirectLLMTransport implements AgentTransport {
   private readonly approval = inject(AgentApprovalService);
   private readonly interrupts = inject(InterruptRegistryService);
 
-  /** Approval tickets created during `run`; resolved during `resume`. */
-  private readonly pendingApprovalPromises = new Map<string, Promise<boolean>>();
+  /** Maximum reasoning turns in a single `run` before forcing termination. */
+  private static readonly MAX_TURNS = 5;
+
+  /**
+   * Approval tickets created during `run`, keyed by `runId` then ticket id, so
+   * concurrent runs across components never collide on a shared map. Each run's
+   * bucket is consumed and removed during `resume`.
+   */
+  private readonly pendingApprovalPromises = new Map<string, Map<string, Promise<boolean>>>();
+
+  private rememberApprovalPromise(
+    runId: string,
+    ticketId: string,
+    promise: Promise<boolean>,
+  ): void {
+    let bucket = this.pendingApprovalPromises.get(runId);
+    if (!bucket) {
+      bucket = new Map<string, Promise<boolean>>();
+      this.pendingApprovalPromises.set(runId, bucket);
+    }
+    bucket.set(ticketId, promise);
+  }
+
+  private takeApprovalPromise(runId: string, ticketId: string): Promise<boolean> | undefined {
+    const bucket = this.pendingApprovalPromises.get(runId);
+    const promise = bucket?.get(ticketId);
+    if (bucket) {
+      bucket.delete(ticketId);
+      if (bucket.size === 0) this.pendingApprovalPromises.delete(runId);
+    }
+    return promise;
+  }
 
   async *run(input: AgentRunInput): AsyncIterable<AgentEvent> {
     const { threadId, runId, messages: inputMessages, systemPrompt } = input;
@@ -74,39 +110,59 @@ export class DirectLLMTransport implements AgentTransport {
 
     const stepName = 'reasoning';
     try {
-      yield stepStarted({ stepName });
+      let turn = 0;
+      while (turn < DirectLLMTransport.MAX_TURNS) {
+        turn++;
 
-      const snapshot = this.world.snapshot();
-      const stream = this.llm.getStream(
-        messages,
-        snapshot.tools,
-        systemPrompt ?? '',
-        undefined,
-      );
+        yield stepStarted({ stepName });
 
-      const textDeltas: string[] = [];
-      const toolCalls: ToolCall[] = [];
+        // Re-snapshot tools each turn so the model sees the current world.
+        const snapshot = this.world.snapshot();
+        const stream = this.llm.getStream(messages, snapshot.tools, systemPrompt ?? '', undefined);
 
-      for await (const chunk of stream) {
-        if ((chunk.type === 'content' || chunk.type === 'thought') && chunk.text) {
-          textDeltas.push(chunk.text);
-        } else if (chunk.type === 'tool_call' && chunk.data) {
-          toolCalls.push(chunk.data);
+        const textDeltas: string[] = [];
+        const toolCalls: ToolCall[] = [];
+
+        for await (const chunk of stream) {
+          if ((chunk.type === 'content' || chunk.type === 'thought') && chunk.text) {
+            textDeltas.push(chunk.text);
+          } else if (chunk.type === 'tool_call' && chunk.data) {
+            toolCalls.push(chunk.data);
+          }
         }
-      }
 
-      yield stepFinished({ stepName });
+        yield stepFinished({ stepName });
 
-      if (textDeltas.length > 0) {
-        const messageId = crypto.randomUUID();
-        yield textMessageStart({ messageId, role: 'assistant' });
-        for (const delta of textDeltas) {
-          yield textMessageContent({ messageId, delta });
+        const assistantText = textDeltas.join('');
+        if (textDeltas.length > 0) {
+          const messageId = crypto.randomUUID();
+          yield textMessageStart({ messageId, role: 'assistant' });
+          for (const delta of textDeltas) {
+            yield textMessageContent({ messageId, delta });
+          }
+          yield textMessageEnd({ messageId });
         }
-        yield textMessageEnd({ messageId });
-      }
 
-      if (toolCalls.length > 0) {
+        // Mirror the assistant turn into the message history so the next turn
+        // (and any tool results) form a valid conversation.
+        const assistantMessage: LLMMessage = { role: 'assistant', content: assistantText };
+        if (toolCalls.length > 0) {
+          assistantMessage.tool_calls = toolCalls.map((tc) => ({
+            ...tc,
+            type: 'function' as const,
+          }));
+        }
+        if (assistantText || toolCalls.length > 0) {
+          messages.push(assistantMessage);
+        }
+
+        // No tool calls -> the model is done.
+        if (toolCalls.length === 0) {
+          yield runFinished({ threadId, runId, outcome: 'success' });
+          return;
+        }
+
+        let interrupted = false;
         for (const toolCall of toolCalls) {
           yield toolCallStart({
             toolCallId: toolCall.id,
@@ -118,7 +174,7 @@ export class DirectLLMTransport implements AgentTransport {
           });
           yield toolCallEnd({ toolCallId: toolCall.id });
 
-          const { entryId, actionName } = this.codec.decodeAction(toolCall.function.name);
+          const toolKind = this.codec.kind(toolCall.function.name);
           let args: Record<string, unknown> = {};
           try {
             args = JSON.parse(toolCall.function.arguments);
@@ -126,6 +182,31 @@ export class DirectLLMTransport implements AgentTransport {
             /* arguments may be malformed */
           }
 
+          if (toolKind === 'write') {
+            const { entryId, readableName } = this.codec.decodeReadable(toolCall.function.name);
+            const result = await this.world.updateReadable(entryId, readableName, args['value']);
+
+            yield toolCallResult({
+              toolCallId: toolCall.id,
+              content: result.message,
+              role: 'tool',
+            });
+            messages.push({ role: 'tool', content: result.message, tool_call_id: toolCall.id });
+
+            const diff = await this.snapshotService.snapshotAndDiff(previousState);
+            previousState = diff.state;
+            yield stateDelta({ deltas: diff.deltas });
+            continue;
+          }
+
+          if (toolKind !== 'action') {
+            const message = `Unsupported tool name "${toolCall.function.name}".`;
+            yield toolCallResult({ toolCallId: toolCall.id, content: message, role: 'tool' });
+            messages.push({ role: 'tool', content: message, tool_call_id: toolCall.id });
+            continue;
+          }
+
+          const { entryId, actionName } = this.codec.decodeAction(toolCall.function.name);
           const entry = this.world.entries().get(entryId);
           const action = entry?.actions.find((a) => a.name === actionName);
 
@@ -137,7 +218,7 @@ export class DirectLLMTransport implements AgentTransport {
               action.description,
               args,
             );
-            this.pendingApprovalPromises.set(ticketId, promise);
+            this.rememberApprovalPromise(runId, ticketId, promise);
             const pendingInterrupt: PendingInterrupt = {
               id: ticketId,
               toolCallId: toolCall.id,
@@ -158,7 +239,8 @@ export class DirectLLMTransport implements AgentTransport {
               outcome: 'interrupt',
               interrupts: [runInterrupt],
             });
-            return;
+            interrupted = true;
+            break;
           }
 
           const result = await this.world.executeAction(entryId, actionName, args);
@@ -168,13 +250,18 @@ export class DirectLLMTransport implements AgentTransport {
             content: result.message,
             role: 'tool',
           });
+          messages.push({ role: 'tool', content: result.message, tool_call_id: toolCall.id });
 
           const diff = await this.snapshotService.snapshotAndDiff(previousState);
           previousState = diff.state;
           yield stateDelta({ deltas: diff.deltas });
         }
+
+        if (interrupted) return;
+        // Tools ran; loop again so the model can observe the results.
       }
 
+      // Reached the turn cap without the model settling — finish gracefully.
       yield runFinished({ threadId, runId, outcome: 'success' });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -191,7 +278,21 @@ export class DirectLLMTransport implements AgentTransport {
     yield runStarted({ threadId, runId, parentRunId });
 
     const interruptIds = Object.keys(decisions);
-    const matched = this.interrupts.consume(parentRunId ?? runId, interruptIds);
+    const consumeRunId = parentRunId ?? runId;
+    const matched = this.interrupts.consume(consumeRunId, interruptIds);
+
+    // Guard: decisions were supplied but none matched a pending interrupt. This
+    // almost always means `parentRunId` was omitted or points at the wrong run.
+    // Fail loudly instead of silently finishing "success" with no action taken.
+    if (interruptIds.length > 0 && matched.length === 0) {
+      yield runError({
+        threadId,
+        runId,
+        message: `No pending interrupts matched for run "${consumeRunId}". Ensure resume() is called with parentRunId set to the interrupted run's id.`,
+      });
+      yield runFinished({ threadId, runId, parentRunId, outcome: 'error' });
+      return;
+    }
 
     let actionFailed = false;
     for (const interrupt of matched) {
@@ -211,8 +312,7 @@ export class DirectLLMTransport implements AgentTransport {
 
       if (decision.decision === 'approved') {
         const approvalPromise =
-          this.pendingApprovalPromises.get(interrupt.id) ?? Promise.resolve(true);
-        this.pendingApprovalPromises.delete(interrupt.id);
+          this.takeApprovalPromise(consumeRunId, interrupt.id) ?? Promise.resolve(true);
         this.approval.resolveById(interrupt.id, true);
         const approved = await approvalPromise;
         if (approved) {
@@ -235,7 +335,7 @@ export class DirectLLMTransport implements AgentTransport {
           });
         }
       } else if (decision.decision === 'rejected') {
-        this.pendingApprovalPromises.delete(interrupt.id);
+        this.takeApprovalPromise(consumeRunId, interrupt.id);
         this.approval.resolveById(interrupt.id, false);
         yield toolCallResult({
           toolCallId: interrupt.toolCallId,
@@ -243,7 +343,7 @@ export class DirectLLMTransport implements AgentTransport {
           role: 'tool',
         });
       } else {
-        this.pendingApprovalPromises.delete(interrupt.id);
+        this.takeApprovalPromise(consumeRunId, interrupt.id);
         this.approval.resolveById(interrupt.id, false);
         yield toolCallResult({
           toolCallId: interrupt.toolCallId,

@@ -137,8 +137,8 @@ describe('OpenAiProvider', () => {
 
       // Should get 2 chunks: thought + tool_call
       expect(chunks.length).toBe(2);
-      expect(chunks.find(c => c.type === 'thought')).toBeDefined();
-      expect(chunks.find(c => c.type === 'tool_call')).toBeDefined();
+      expect(chunks.find((c) => c.type === 'thought')).toBeDefined();
+      expect(chunks.find((c) => c.type === 'tool_call')).toBeDefined();
     });
 
     it('should accumulate tool call arguments across stream chunks', async () => {
@@ -155,7 +155,7 @@ describe('OpenAiProvider', () => {
         chunks.push(chunk);
       }
 
-      const toolCalls = chunks.filter(c => c.type === 'tool_call');
+      const toolCalls = chunks.filter((c) => c.type === 'tool_call');
       expect(toolCalls).toHaveLength(1);
       expect(toolCalls[0].data!.function.arguments).toBe('{"x":1,"y":2}');
     });
@@ -173,7 +173,7 @@ describe('OpenAiProvider', () => {
         chunks.push(chunk);
       }
 
-      const toolCalls = chunks.filter(c => c.type === 'tool_call');
+      const toolCalls = chunks.filter((c) => c.type === 'tool_call');
       expect(toolCalls).toHaveLength(2);
       expect(toolCalls[0].data!.function.name).toBe('a__action1');
       expect(toolCalls[1].data!.function.name).toBe('b__action2');
@@ -213,7 +213,7 @@ describe('OpenAiProvider', () => {
       for await (const chunk of provider.getStream(
         sampleMessages(),
         sampleTools(),
-        'You are a test bot.'
+        'You are a test bot.',
       )) {
         chunks.push(chunk);
       }
@@ -301,6 +301,24 @@ describe('OpenAiProvider', () => {
       const { provideOpenAi } = await import('./openai-provider.service');
       const provider = provideOpenAi({ apiKey: 'sk-42' });
       expect(provider).toBeInstanceOf(OpenAiProvider);
+    });
+  });
+
+  // ========== Browser API-key guardrail (#13) ==========
+
+  describe('browser API-key warning', () => {
+    it('warns once when constructed with an API key in a browser context (dev mode)', () => {
+      // Reset the one-time guard so this test is deterministic regardless of order.
+      (OpenAiProvider as unknown as { warnedBrowserKey: boolean }).warnedBrowserKey = false;
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      // jsdom provides `window`, and Angular tests run in dev mode by default.
+      new OpenAiProvider(createConfig());
+      new OpenAiProvider(createConfig());
+
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy.mock.calls[0][0]).toContain('[Agentic-UI]');
+      warnSpy.mockRestore();
     });
   });
 });

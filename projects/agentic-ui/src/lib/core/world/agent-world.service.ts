@@ -1,11 +1,23 @@
-import { Injectable, signal, computed, ApplicationRef, inject, DestroyRef, afterEveryRender } from '@angular/core';
-import { firstValueFrom, Subject } from 'rxjs';
+import {
+  Injectable,
+  signal,
+  computed,
+  ApplicationRef,
+  inject,
+  DestroyRef,
+  afterEveryRender,
+} from '@angular/core';
+import { Subject } from 'rxjs';
 import { AgentApprovalService } from '../approval/agent-approval.service';
 import { ActionParameter, AgentActionResult, AgentAction } from './agent-action.model';
 import { SnapshotConfig, ToolDefinition, WorldEntry, WorldSnapshot } from './world-entry.interface';
 import { AgentJsonSchema, JsonSchemaProperty } from '../schema/agent-json-schema.model';
 import { AgentReadable, AgentWritableResult } from '../state/agent-readable.model';
 import { validateAgentJsonSchema } from '../schema/agent-json-schema.validator';
+import { ToolNameCodec } from '../events/tool-name-codec';
+
+/** OpenAI tool-name length constraint (`^[a-zA-Z0-9_-]{1,64}$`). */
+const MAX_TOOL_NAME_LENGTH = 64;
 
 /**
  * AgentWorldService — the "Sensory Cortex" of the Agentic-UI framework.
@@ -26,6 +38,7 @@ export class AgentWorldService {
   private readonly appRef = inject(ApplicationRef);
   private readonly destroyRef = inject(DestroyRef);
   private readonly approval = inject(AgentApprovalService);
+  private readonly codec = new ToolNameCodec();
 
   // ---- Public signals ----
 
@@ -58,11 +71,13 @@ export class AgentWorldService {
 
   // ---- Stability tracking ----
   private readonly renderComplete$ = new Subject<void>();
+  /** Monotonic counter incremented on every committed render. */
+  private renderGeneration = 0;
 
   constructor() {
     this.setupIntersectionObserver();
     this.setupStabilityTracking();
-    
+
     // Cleanup: disconnect IntersectionObserver when service is destroyed
     this.destroyRef.onDestroy(() => {
       if (this.observer) {
@@ -77,20 +92,43 @@ export class AgentWorldService {
   register(entry: WorldEntry): void {
     // Assert OpenAI schema specifications ^[a-zA-Z0-9_-]{1,64}$ and block custom nested namespace errors
     const SCHEMA_RULE = /^[a-zA-Z0-9_-]{1,64}$/;
-    
+
     if (!SCHEMA_RULE.test(entry.id) || entry.id.includes('__')) {
-      throw new Error(`[Agentic-UI Verification Error] component structural mismatch: ID "${entry.id}" must match strict naming conventions: alphanumeric, dashes, underscores only up to 64 chars, and cannot contain double underscores "__".`);
+      throw new Error(
+        `[Agentic-UI Verification Error] component structural mismatch: ID "${entry.id}" must match strict naming conventions: alphanumeric, dashes, underscores only up to 64 chars, and cannot contain double underscores "__".`,
+      );
     }
-    
+
     for (const item of entry.actions) {
       if (!SCHEMA_RULE.test(item.name) || item.name.includes('__')) {
-        throw new Error(`[Agentic-UI Verification Error] Action naming constraint failure: Action key "${item.name}" bound to "${entry.id}" contains illegal tokens.`);
+        throw new Error(
+          `[Agentic-UI Verification Error] Action naming constraint failure: Action key "${item.name}" bound to "${entry.id}" contains illegal tokens.`,
+        );
+      }
+      // Fail fast: the encoded tool name must fit OpenAI's 64-char limit. Validating
+      // here (rather than lazily at snapshot time) surfaces the error at the point of
+      // registration instead of during the first agent run.
+      const actionTool = this.codec.encodeAction(entry.id, item.name);
+      if (actionTool.length > MAX_TOOL_NAME_LENGTH) {
+        throw new Error(
+          `[Agentic-UI Verification Error] Combined tool name "${actionTool}" exceeds ${MAX_TOOL_NAME_LENGTH} character limit. Entry: "${entry.id}" (${entry.id.length} chars), Action: "${item.name}" (${item.name.length} chars), Total: ${actionTool.length} chars (including "__action__" separator).`,
+        );
       }
     }
 
     for (const readable of entry.readables ?? []) {
       if (!SCHEMA_RULE.test(readable.name) || readable.name.includes('__')) {
-        throw new Error(`[Agentic-UI Verification Error] Readable naming constraint failure: Readable key "${readable.name}" bound to "${entry.id}" contains illegal tokens.`);
+        throw new Error(
+          `[Agentic-UI Verification Error] Readable naming constraint failure: Readable key "${readable.name}" bound to "${entry.id}" contains illegal tokens.`,
+        );
+      }
+      if (readable.writable) {
+        const writeTool = this.codec.encodeReadable(entry.id, readable.name, 'write');
+        if (writeTool.length > MAX_TOOL_NAME_LENGTH) {
+          throw new Error(
+            `[Agentic-UI Verification Error] Combined tool name "${writeTool}" exceeds ${MAX_TOOL_NAME_LENGTH} character limit. Entry: "${entry.id}", Readable: "${readable.name}".`,
+          );
+        }
       }
     }
 
@@ -167,7 +205,10 @@ export class AgentWorldService {
     if (action.inputSchema) {
       const validation = validateAgentJsonSchema(action.inputSchema, params ?? {});
       if (!validation.valid) {
-        return { success: false, message: `Invalid params: ${validation.message ?? 'unknown error'}` };
+        return {
+          success: false,
+          message: `Invalid params: ${validation.message ?? 'unknown error'}`,
+        };
       }
     }
 
@@ -175,7 +216,10 @@ export class AgentWorldService {
       const schema = this.paramsToLegacySchema(action.parameters);
       const validation = validateAgentJsonSchema(schema, params ?? {});
       if (!validation.valid) {
-        return { success: false, message: `Invalid params: ${validation.message ?? 'unknown error'}` };
+        return {
+          success: false,
+          message: `Invalid params: ${validation.message ?? 'unknown error'}`,
+        };
       }
     }
 
@@ -245,7 +289,10 @@ export class AgentWorldService {
 
     const validation = validateAgentJsonSchema(readable.schema, { value });
     if (!validation.valid) {
-      return { success: false, message: `Invalid readable value: ${validation.message ?? 'unknown error'}` };
+      return {
+        success: false,
+        message: `Invalid readable value: ${validation.message ?? 'unknown error'}`,
+      };
     }
 
     try {
@@ -273,8 +320,6 @@ export class AgentWorldService {
     const maxContextLen = config.maxContextLen ?? 2000;
     const prioritySet = new Set(config.priorityRoles ?? []);
 
-
-    // Expose all items to prevent the LLM from missing out-of-view targets
     const allEntries = this._entries();
     const visibleIds = this.visibleIds();
 
@@ -286,58 +331,60 @@ export class AgentWorldService {
     });
 
     // Scan for any active modal or overlay that is currently visible in the viewport
-    const activeModalEntry = sorted.find(([, entry]) =>
-      (entry.role === 'Modal' || entry.role === 'Overlay' || entry.role === 'Dialog') && visibleIds.has(entry.id)
+    const activeModalEntry = sorted.find(
+      ([, entry]) =>
+        (entry.role === 'Modal' || entry.role === 'Overlay' || entry.role === 'Dialog') &&
+        visibleIds.has(entry.id),
     );
 
-     const entries: { id: string; role: string; isVisible: boolean; isOccluded: boolean; actions: string[]; readables: string[] }[] = [];
-     const interactiveEntriesMap = new Map<string, WorldEntry>();
+    // Determine which entries are interactive (visible AND not occluded by a modal).
+    const interactiveEntriesMap = new Map<string, WorldEntry>();
+    for (const [id, entry] of sorted) {
+      let isOccluded = false;
 
-     for (const [id, entry] of sorted) {
-       let isOccluded = false;
+      // If a modal layer exists, evaluate whether this element is trapped behind it
+      if (activeModalEntry && activeModalEntry[1].id !== id) {
+        const modalElement = activeModalEntry[1].element;
+        const targetElement = entry.element;
 
-       // If a modal layer exists, evaluate whether this element is trapped behind it
-       if (activeModalEntry && activeModalEntry[1].id !== id) {
-         const modalElement = activeModalEntry[1].element;
-         const targetElement = entry.element;
+        if (modalElement && targetElement) {
+          // If the element is NOT part of the modal's DOM tree, it is occluded by the backdrop
+          isOccluded = !modalElement.contains(targetElement);
+        } else if (modalElement) {
+          // Modal has an element but target doesn't — treat target as occluded
+          isOccluded = true;
+        }
+        // If neither has an element (no DOM), skip occlusion — can't verify
+      }
 
-         if (modalElement && targetElement) {
-           // If the element is NOT part of the modal's DOM tree, it is occluded by the backdrop
-           isOccluded = !modalElement.contains(targetElement);
-         } else if (modalElement) {
-           // Modal has an element but target doesn't — treat target as occluded
-           isOccluded = true;
-         }
-         // If neither has an element (no DOM), skip occlusion — can't verify
-       }
+      if (visibleIds.has(id) && !isOccluded) {
+        interactiveEntriesMap.set(id, entry);
+      }
+    }
 
-       const isVisible = visibleIds.has(id);
-       entries.push({
-         id,
-         role: entry.role,
-         isVisible: isVisible,
-         isOccluded: isOccluded,
-         actions: entry.actions.map((a) => a.name),
-         readables: (entry.readables ?? []).map((r) => r.name),
-       });
+    // Build tools and capture exactly which entries survived the maxTools budget
+    // (an entry is included all-or-nothing — never partially represented).
+    const { tools, includedEntryIds } = this.buildToolDefinitions(interactiveEntriesMap, maxTools);
 
-       // Only allow tool generation if the component is visible AND not blocked by an overlay
-       if (isVisible && !isOccluded) {
-         interactiveEntriesMap.set(id, entry);
-       }
-     }
+    // Context lists ONLY the entries that produced callable tools. Occluded and
+    // budget-dropped entries are omitted entirely so the LLM never sees an action
+    // in context that it has no corresponding tool to call.
+    const includedEntries = [...interactiveEntriesMap.entries()].filter(([id]) =>
+      includedEntryIds.has(id),
+    );
 
-     let context =
-       entries.length === 0
-         ? 'No interactive components exist on this page.'
-         : 'Interactive components on the page:\n' +
-           entries.map((e) => {
-             const status = e.isOccluded
-               ? 'Occluded/Inert - Blocked by Modal Overlay'
-               : `Visible In Viewport: ${e.isVisible}`;
-             const stateStr = e.readables.length > 0 ? ` — state: ${e.readables.join(', ')}` : '';
-             return `  [${e.id}] ${e.role} (${status}) — actions: ${e.actions.join(', ')}${stateStr}`;
-           }).join('\n');
+    let context =
+      includedEntries.length === 0
+        ? 'No interactive components are currently accessible on this page.'
+        : 'Interactive components on the page:\n' +
+          includedEntries
+            .map(([id, entry]) => {
+              const actions = entry.actions.map((a) => a.name);
+              const readables = (entry.readables ?? []).map((r) => r.name);
+              const stateStr = readables.length > 0 ? ` — state: ${readables.join(', ')}` : '';
+              return `  [${id}] ${entry.role} (Visible In Viewport: true) — actions: ${actions.join(', ')}${stateStr}`;
+            })
+            .join('\n');
 
     // Truncate context if over budget
     const truncationSuffix = '\n... (additional entries truncated)';
@@ -346,12 +393,6 @@ export class AgentWorldService {
       context = truncated + truncationSuffix;
     }
 
-    // Build tools using only the accessible, unoccluded components
-    const tools = this.buildToolDefinitions(
-      interactiveEntriesMap,
-      maxTools,
-    );
-
     return { context, tools };
   }
 
@@ -359,21 +400,32 @@ export class AgentWorldService {
     const snapshot = this.snapshot(config);
     const allEntries = this._entries();
 
+    // Only expose live readable values for entries that are actually included in the
+    // snapshot (visible, unoccluded, and within the tool budget). Reading every
+    // registered readable would leak occluded/off-screen state the scoping hides.
+    const includedIds = this.computeIncludedEntryIds(config);
+
     const readableValues: string[] = [];
-    for (const entry of allEntries.values()) {
+    for (const [id, entry] of allEntries) {
+      if (!includedIds.has(id)) continue;
       for (const readable of entry.readables ?? []) {
         try {
           const result = await readable.read();
           readableValues.push(`${readable.name}: ${JSON.stringify(result.value)}`);
         } catch (error) {
-          readableValues.push(`${readable.name}: [error: ${error instanceof Error ? error.message : String(error)}]`);
+          readableValues.push(
+            `${readable.name}: [error: ${error instanceof Error ? error.message : String(error)}]`,
+          );
         }
       }
     }
 
     return {
       ...snapshot,
-      context: readableValues.length > 0 ? `${snapshot.context}\nState:\n${readableValues.join('\n')}` : snapshot.context,
+      context:
+        readableValues.length > 0
+          ? `${snapshot.context}\nState:\n${readableValues.join('\n')}`
+          : snapshot.context,
     };
   }
 
@@ -405,59 +457,97 @@ export class AgentWorldService {
   }
 
   private setupStabilityTracking(): void {
-    // Register Angular's modern post-render hook to capture the exact moment 
-    // that layout change detection updates finish painting to the browser DOM tree.
-    // Executing inside the constructor establishes the correct injection context natively.
+    // Register Angular's modern post-render hook to capture the moment a change
+    // detection pass finishes committing to the DOM. Running inside the
+    // constructor establishes the correct injection context.
     afterEveryRender(() => {
+      this.renderGeneration++;
       this.isStable.set(true);
       this.renderComplete$.next();
     });
   }
 
-  /** Wait until the next global Angular rendering wave finishes committing and painting to the DOM. */
+  /**
+   * Wait until a render commits after this call, then yield once to the macrotask
+   * queue so async IntersectionObserver callbacks settle.
+   *
+   * Resolves on the first `afterEveryRender` that fires after invocation. If no
+   * further render occurs (e.g. the preceding mutation produced no view change),
+   * a microtask fallback resolves once the app is already stable so the caller is
+   * never blocked waiting for a render that will never come.
+   */
   async waitForStable(): Promise<void> {
+    const startGeneration = this.renderGeneration;
     this.isStable.set(false);
-    
-    // Wait for the next framework paint loop iteration to finalize
-    await firstValueFrom(this.renderComplete$);
-    
-    // Crucial: Yield control to the browser macro-task queue once. This guarantees that 
-    // asynchronous IntersectionObserver callbacks execute and update visibility states 
-    // immediately after the element is painted on screen.
-    await new Promise(resolve => setTimeout(resolve, 0));
+
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        sub.unsubscribe();
+        resolve();
+      };
+
+      // Primary path: the next committed render.
+      const sub = this.renderComplete$.subscribe(() => finish());
+
+      // Fallback: if no render is pending (the generation never advances), resolve
+      // on a later microtask so we don't hang. Guarded by `settled` so a real
+      // render still takes precedence when one is coming.
+      queueMicrotask(() => {
+        if (this.renderGeneration > startGeneration) {
+          finish();
+        } else {
+          // Give a real render one more microtask hop to win the race, then
+          // resolve regardless so callers proceed.
+          queueMicrotask(finish);
+        }
+      });
+    });
+
+    // Yield to the macrotask queue once so IntersectionObserver callbacks run.
+    await new Promise((resolve) => setTimeout(resolve, 0));
   }
 
   private buildToolDefinitions(
     entries: Map<string, WorldEntry>,
     maxTools?: number,
-  ): ToolDefinition[] {
+  ): { tools: ToolDefinition[]; includedEntryIds: Set<string> } {
     const tools: ToolDefinition[] = [];
-    const MAX_TOOL_NAME_LENGTH = 64; // OpenAI schema constraint
+    const includedEntryIds = new Set<string>();
 
     for (const [entryId, entry] of entries) {
-      if (maxTools !== undefined && tools.length >= maxTools) break;
-      
+      // Build the entry's complete tool batch first, then include it all-or-nothing.
+      // An entry is never partially represented: if its tools don't fit the remaining
+      // budget, it (and every subsequent entry) is dropped so the LLM never sees a
+      // component with only some of its actions exposed.
+      const batch: ToolDefinition[] = [];
+
       // Build tools for actions
       for (const action of entry.actions) {
-        if (maxTools !== undefined && tools.length >= maxTools) break;
-        
-        const toolName = `${entryId}__${action.name}`;
+        const toolName = this.codec.encodeAction(entryId, action.name);
         if (toolName.length > MAX_TOOL_NAME_LENGTH) {
+          // Defensive: register() already validates this, so this should be unreachable.
           throw new Error(
             `[Agentic-UI Tool Name Error] Combined tool name "${toolName}" exceeds ${MAX_TOOL_NAME_LENGTH} character limit. ` +
-            `Entry: "${entryId}" (${entryId.length} chars), Action: "${action.name}" (${action.name.length} chars), ` +
-            `Total: ${toolName.length} chars (including "__" separator).`
+              `Entry: "${entryId}" (${entryId.length} chars), Action: "${action.name}" (${action.name.length} chars), ` +
+              `Total: ${toolName.length} chars (including "__action__" separator).`,
           );
         }
-        
+
         // Use inputSchema if available, otherwise fall back to legacy parameters
-        const parameters: { type: 'object'; properties: Record<string, unknown>; required?: string[] } = action.inputSchema
+        const parameters: {
+          type: 'object';
+          properties: Record<string, unknown>;
+          required?: string[];
+        } = action.inputSchema
           ? this.jsonSchemaToToolParameters(action.inputSchema)
-          : (action.parameters
-              ? this.paramsToLegacySchema(action.parameters)
-              : { type: 'object', properties: {} });
-        
-        tools.push({
+          : action.parameters
+            ? this.paramsToLegacySchema(action.parameters)
+            : { type: 'object', properties: {} };
+
+        batch.push({
           type: 'function',
           function: {
             name: toolName,
@@ -469,17 +559,16 @@ export class AgentWorldService {
 
       // Build tools for writable readables (setter tools)
       for (const readable of entry.readables ?? []) {
-        if (maxTools !== undefined && tools.length >= maxTools) break;
         if (!readable.writable) continue; // Skip read-only readables
 
-        const toolName = `${entryId}__set_${readable.name}`;
+        const toolName = this.codec.encodeReadable(entryId, readable.name, 'write');
         if (toolName.length > MAX_TOOL_NAME_LENGTH) {
           throw new Error(
-            `[Agentic-UI Tool Name Error] Combined tool name "${toolName}" exceeds ${MAX_TOOL_NAME_LENGTH} character limit.`
+            `[Agentic-UI Tool Name Error] Combined tool name "${toolName}" exceeds ${MAX_TOOL_NAME_LENGTH} character limit.`,
           );
         }
 
-        tools.push({
+        batch.push({
           type: 'function',
           function: {
             name: toolName,
@@ -488,9 +577,71 @@ export class AgentWorldService {
           },
         });
       }
+
+      // Entries that contribute no tools (no actions, no writable readables) still
+      // carry perceivable state if they expose read-only readables. Include them in
+      // the snapshot scope at zero tool-budget cost; otherwise skip them entirely.
+      if (batch.length === 0) {
+        if ((entry.readables?.length ?? 0) > 0) {
+          includedEntryIds.add(entryId);
+        }
+        continue;
+      }
+
+      // All-or-nothing budget check: stop entirely once an entry won't fit.
+      if (maxTools !== undefined && tools.length + batch.length > maxTools) {
+        break;
+      }
+
+      tools.push(...batch);
+      includedEntryIds.add(entryId);
     }
 
-    return tools;
+    return { tools, includedEntryIds };
+  }
+
+  /**
+   * Compute the set of entry ids that `snapshot()` would include (visible,
+   * unoccluded, and within the tool budget). Shared by `snapshotAsync` so its
+   * live readable values match the scoped snapshot exactly.
+   */
+  private computeIncludedEntryIds(config: SnapshotConfig = {}): Set<string> {
+    const maxTools = config.maxTools ?? 20;
+    const prioritySet = new Set(config.priorityRoles ?? []);
+
+    const allEntries = this._entries();
+    const visibleIds = this.visibleIds();
+
+    const sorted = [...allEntries.entries()].sort(([, a], [, b]) => {
+      const aPrio = prioritySet.has(a.role) ? 1 : 0;
+      const bPrio = prioritySet.has(b.role) ? 1 : 0;
+      return bPrio - aPrio;
+    });
+
+    const activeModalEntry = sorted.find(
+      ([, entry]) =>
+        (entry.role === 'Modal' || entry.role === 'Overlay' || entry.role === 'Dialog') &&
+        visibleIds.has(entry.id),
+    );
+
+    const interactiveEntriesMap = new Map<string, WorldEntry>();
+    for (const [id, entry] of sorted) {
+      let isOccluded = false;
+      if (activeModalEntry && activeModalEntry[1].id !== id) {
+        const modalElement = activeModalEntry[1].element;
+        const targetElement = entry.element;
+        if (modalElement && targetElement) {
+          isOccluded = !modalElement.contains(targetElement);
+        } else if (modalElement) {
+          isOccluded = true;
+        }
+      }
+      if (visibleIds.has(id) && !isOccluded) {
+        interactiveEntriesMap.set(id, entry);
+      }
+    }
+
+    return this.buildToolDefinitions(interactiveEntriesMap, maxTools).includedEntryIds;
   }
 
   /** Convert JSON Schema to OpenAI tool parameters format. */

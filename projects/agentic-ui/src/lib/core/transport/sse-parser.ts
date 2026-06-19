@@ -21,10 +21,22 @@ export function* drainSseFrames(buffer: string): Generator<AgentEvent, string> {
   while (idx !== -1) {
     const frame = buffer.slice(cursor, idx);
     cursor = idx + 2;
-    const line = frame.split('\n').find((l) => l.startsWith('data: '));
-    if (line) {
+
+    // Collect every `data:` line in the frame (per SSE spec, multiple data
+    // lines are concatenated with "\n"). A single optional space after the
+    // colon is stripped.
+    const dataParts: string[] = [];
+    for (const rawLine of frame.split('\n')) {
+      if (!rawLine.startsWith('data:')) continue;
+      let value = rawLine.slice(5);
+      if (value.startsWith(' ')) value = value.slice(1);
+      dataParts.push(value);
+    }
+
+    if (dataParts.length > 0) {
+      const payload = dataParts.join('\n');
       try {
-        const parsed: unknown = JSON.parse(line.slice(6));
+        const parsed: unknown = JSON.parse(payload);
         if (
           parsed !== null &&
           typeof parsed === 'object' &&

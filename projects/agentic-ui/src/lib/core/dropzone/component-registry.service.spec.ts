@@ -1,5 +1,6 @@
 import { ComponentRegistry } from './component-registry.service';
-import { Component } from '@angular/core';
+import { Component, inject } from '@angular/core';
+import { TestBed } from '@angular/core/testing';
 
 @Component({
   selector: 'test-component',
@@ -126,6 +127,28 @@ describe('ComponentRegistry', () => {
       registry.clear();
       expect(registry.list()).toEqual([]);
       expect(registry.get('test1')).toBeNull();
+    });
+  });
+
+  describe('registerScoped (#M1)', () => {
+    @Component({ selector: 'scoped-host', template: '', standalone: true })
+    class ScopedHost {
+      constructor() {
+        const reg = inject(ComponentRegistry);
+        reg.registerScoped('scoped-id', TestComponent);
+      }
+    }
+
+    it('auto-unregisters when the consuming component is destroyed', () => {
+      TestBed.configureTestingModule({ imports: [ScopedHost] });
+      const sharedRegistry = TestBed.inject(ComponentRegistry);
+
+      const fixture = TestBed.createComponent(ScopedHost);
+      fixture.detectChanges();
+      expect(sharedRegistry.get('scoped-id')).toBe(TestComponent);
+
+      fixture.destroy();
+      expect(sharedRegistry.get('scoped-id')).toBeNull();
     });
   });
 });

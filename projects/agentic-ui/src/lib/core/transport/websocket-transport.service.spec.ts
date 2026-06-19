@@ -35,6 +35,9 @@ function setupWebSocketMock(): void {
     constructor(_url: string) {
       super();
       mockWs = this;
+      // Fire onopen asynchronously so connect()'s promise resolves, mirroring
+      // real WebSocket behavior.
+      setTimeout(() => this.onopen?.(new Event('open')), 0);
     }
   };
   (globalThis as any).WebSocket.OPEN = 1;
@@ -104,20 +107,41 @@ describe('WebsocketTransportService', () => {
       service.disconnect();
       expect(service['nextRequestId']).toBe(0);
     });
+
+    it('rejects in-flight requests instead of letting them hang (#E2)', async () => {
+      await service.connect('ws://test');
+      const pending = service.request('tools/list');
+      // Disconnect before any response arrives.
+      service.disconnect();
+      await expect(pending).rejects.toThrow(/disconnected/i);
+      expect(service['pendingResponses'].size).toBe(0);
+      expect(service['pendingTimers'].size).toBe(0);
+    });
+
+    it('does not auto-reconnect after an intentional disconnect (#E1)', async () => {
+      await service.connect('ws://test');
+      const first = mockWs!;
+      service.disconnect();
+      // Simulate the close event the browser fires after close().
+      first.onclose?.(new Event('close'));
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      // No reconnect timer scheduled; state stays disconnected/closing.
+      expect(service['reconnectTimer']).toBeNull();
+      expect(service['currentUrl']).toBeNull();
+    });
   });
 
   describe('message handling', () => {
-    it('parses valid JSON-RPC message', () => {
+    it('dispatches a tools/call message to the adapter', () => {
       const msg: JsonRpcRequest = {
         jsonrpc: '2.0',
-        method: 'test_method',
-        params: { key: 'value' },
+        method: 'tools/call',
+        params: { name: 'foo__action__bar', arguments: { key: 'value' } },
         id: 1,
       };
 
       service['handleMessage'](JSON.stringify(msg));
-      // Verify adapter was called via dispatchMethodCall
-      expect(mockAdapter.executeTool).toHaveBeenCalled();
+      expect(mockAdapter.executeTool).toHaveBeenCalledWith('foo__action__bar', { key: 'value' });
     });
 
     it('handles message parse errors gracefully', () => {
@@ -125,33 +149,54 @@ describe('WebsocketTransportService', () => {
       service['handleMessage']('invalid json');
       expect(consoleSpy).toHaveBeenCalledWith(
         '[WebSocket] Failed to parse message:',
-        expect.any(Error)
+        expect.any(Error),
       );
       consoleSpy.mockRestore();
     });
   });
 
   describe('method dispatch', () => {
-    it('dispatches method calls to adapter', async () => {
+    it('routes tools/call to the adapter', async () => {
       const request: JsonRpcRequest = {
         jsonrpc: '2.0',
-        method: 'do_action',
-        params: { param: 'value' },
+        method: 'tools/call',
+        params: { name: 'do_action', arguments: { param: 'value' } },
         id: 1,
       };
 
       service['handleMessage'](JSON.stringify(request));
-
-      // Let async dispatch complete
       await new Promise((resolve) => setTimeout(resolve, 10));
 
       expect(mockAdapter.executeTool).toHaveBeenCalledWith('do_action', { param: 'value' });
     });
 
+    it('returns METHOD_NOT_FOUND for unknown methods instead of executing a tool (#E3)', async () => {
+      await service.connect('ws://test');
+      const sendSpy = mockWs!.send;
+      sendSpy.mockClear();
+
+      const request: JsonRpcRequest = {
+        jsonrpc: '2.0',
+        method: 'totally_unknown_method',
+        params: {},
+        id: 7,
+      };
+      service['handleMessage'](JSON.stringify(request));
+      await new Promise((resolve) => setTimeout(resolve, 10));
+
+      // Adapter must NOT be invoked for an unknown method.
+      expect(mockAdapter.executeTool).not.toHaveBeenCalled();
+      // An error response with METHOD_NOT_FOUND (-32601) must be sent back.
+      const sent = sendSpy.mock.calls.map((c) => JSON.parse(c[0] as string));
+      const errorResponse = sent.find((m) => m.id === 7 && m.error);
+      expect(errorResponse).toBeDefined();
+      expect(errorResponse.error.code).toBe(-32601);
+    });
+
     it('handles messages without throwing', async () => {
       const request: JsonRpcRequest = {
         jsonrpc: '2.0',
-        method: 'do_action',
+        method: 'tools/list',
         params: {},
         id: 1,
       };

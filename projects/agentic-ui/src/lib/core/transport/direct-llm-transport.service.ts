@@ -93,7 +93,7 @@ export class DirectLLMTransport implements AgentTransport {
     return promise;
   }
 
-  async *run(input: AgentRunInput): AsyncIterable<AgentEvent> {
+  async *run(input: AgentRunInput, signal?: AbortSignal): AsyncIterable<AgentEvent> {
     const { threadId, runId, messages: inputMessages, systemPrompt } = input;
     const messages: LLMMessage[] = inputMessages.map((m) => {
       const msg: LLMMessage = { role: m.role, content: m.content };
@@ -114,11 +114,17 @@ export class DirectLLMTransport implements AgentTransport {
       while (turn < DirectLLMTransport.MAX_TURNS) {
         turn++;
 
+        if (signal?.aborted) {
+          yield runError({ threadId, runId, message: 'aborted' });
+          yield runFinished({ threadId, runId, outcome: 'error' });
+          return;
+        }
+
         yield stepStarted({ stepName });
 
         // Re-snapshot tools each turn so the model sees the current world.
         const snapshot = this.world.snapshot();
-        const stream = this.llm.getStream(messages, snapshot.tools, systemPrompt ?? '', undefined);
+        const stream = this.llm.getStream(messages, snapshot.tools, systemPrompt ?? '', signal);
 
         const textDeltas: string[] = [];
         const toolCalls: ToolCall[] = [];
@@ -190,6 +196,7 @@ export class DirectLLMTransport implements AgentTransport {
               toolCallId: toolCall.id,
               content: result.message,
               role: 'tool',
+              success: result.success,
             });
             messages.push({ role: 'tool', content: result.message, tool_call_id: toolCall.id });
 
@@ -201,7 +208,12 @@ export class DirectLLMTransport implements AgentTransport {
 
           if (toolKind !== 'action') {
             const message = `Unsupported tool name "${toolCall.function.name}".`;
-            yield toolCallResult({ toolCallId: toolCall.id, content: message, role: 'tool' });
+            yield toolCallResult({
+              toolCallId: toolCall.id,
+              content: message,
+              role: 'tool',
+              success: false,
+            });
             messages.push({ role: 'tool', content: message, tool_call_id: toolCall.id });
             continue;
           }
@@ -249,6 +261,7 @@ export class DirectLLMTransport implements AgentTransport {
             toolCallId: toolCall.id,
             content: result.message,
             role: 'tool',
+            success: result.success,
           });
           messages.push({ role: 'tool', content: result.message, tool_call_id: toolCall.id });
 
@@ -271,7 +284,7 @@ export class DirectLLMTransport implements AgentTransport {
     }
   }
 
-  async *resume(input: AgentRunInput): AsyncIterable<AgentEvent> {
+  async *resume(input: AgentRunInput, _signal?: AbortSignal): AsyncIterable<AgentEvent> {
     const { threadId, runId, parentRunId } = input;
     const decisions: Record<string, ResumeDecision> = input.resume ?? {};
 
@@ -325,6 +338,7 @@ export class DirectLLMTransport implements AgentTransport {
             toolCallId: interrupt.toolCallId,
             content: result.message,
             role: 'tool',
+            success: result.success,
           });
           if (!result.success) actionFailed = true;
         } else {
@@ -332,6 +346,7 @@ export class DirectLLMTransport implements AgentTransport {
             toolCallId: interrupt.toolCallId,
             content: 'Action rejected by user.',
             role: 'tool',
+            success: false,
           });
         }
       } else if (decision.decision === 'rejected') {
@@ -341,6 +356,7 @@ export class DirectLLMTransport implements AgentTransport {
           toolCallId: interrupt.toolCallId,
           content: decision.reason ?? 'Action rejected by user.',
           role: 'tool',
+          success: false,
         });
       } else {
         this.takeApprovalPromise(consumeRunId, interrupt.id);

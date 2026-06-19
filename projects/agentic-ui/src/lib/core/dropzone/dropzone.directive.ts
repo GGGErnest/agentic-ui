@@ -1,10 +1,4 @@
-import {
-  Directive,
-  ViewContainerRef,
-  OnDestroy,
-  inject,
-  ComponentRef,
-} from '@angular/core';
+import { Directive, ViewContainerRef, OnDestroy, inject, ComponentRef } from '@angular/core';
 import { ComponentRegistry } from './component-registry.service';
 import { RenderMode } from './dropzone.models';
 
@@ -32,7 +26,7 @@ export class DropzoneDirective implements OnDestroy {
   render(
     componentId: string,
     inputs: Record<string, unknown> = {},
-    mode: RenderMode = 'append'
+    mode: RenderMode = 'append',
   ): ComponentRef<unknown> | null {
     const component = this.registry.get(componentId);
     if (!component) {
@@ -59,9 +53,14 @@ export class DropzoneDirective implements OnDestroy {
     // Create and render component
     const componentRef = this.vcr.createComponent(component);
 
-    // Set inputs on component instance
+    // Set inputs on component instance. Guard against unknown input keys so a
+    // mismatched inputs object doesn't throw and abort the whole render.
     Object.entries(inputs).forEach(([key, value]) => {
-      componentRef.setInput(key, value);
+      try {
+        componentRef.setInput(key, value);
+      } catch {
+        // Unknown input on the target component — skip it.
+      }
     });
 
     componentRef.changeDetectorRef.detectChanges();

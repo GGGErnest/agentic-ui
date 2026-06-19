@@ -1,11 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  computed,
-  input,
-  output,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { AgentAction, AgentActionResult } from '../../core/world/agent-action.model';
 import { AGENTIC_COMPONENT } from '../../core/world/agentic-component.token';
 import { AgenticDirective } from '../../directives/agentic.directive';
@@ -236,7 +229,8 @@ export class DataTableComponent {
 
   private async doFindRow(query: RowQuery): Promise<AgentActionResult> {
     const column = query.column ?? this.columns()[0];
-    const value = query.value?.toLowerCase();
+    const rawValue = query.value;
+    const value = rawValue?.toLowerCase();
     if (!value) {
       return { success: false, message: 'No search value provided.' };
     }
@@ -246,9 +240,10 @@ export class DataTableComponent {
       return val != null && String(val).toLowerCase().includes(value);
     });
 
-    // Set filter to show matches
+    // Set filter to show matches. Store the original (non-lowercased) value;
+    // filteredData lowercases for comparison so display stays faithful.
     this.filterColumn.set(column);
-    this.filterText.set(value);
+    this.filterText.set(rawValue ?? '');
 
     if (matches.length === 0) {
       return {
@@ -274,6 +269,13 @@ export class DataTableComponent {
 
     const idSet = new Set(op.ids.map(String));
     const affected = this.data().filter((row) => idSet.has(String(row[this.idField()]))).length;
+    if (affected === 0) {
+      return {
+        success: false,
+        message: `No rows matched the provided IDs (${op.ids.join(', ')}); nothing was edited.`,
+        data: { affectedRows: 0 },
+      };
+    }
     this.bulkEdited.emit({ ids: op.ids, changes: op.changes });
 
     return {
@@ -290,6 +292,13 @@ export class DataTableComponent {
 
     const idSet = new Set(params.ids.map(String));
     const deletedCount = this.data().filter((row) => idSet.has(String(row[this.idField()]))).length;
+    if (deletedCount === 0) {
+      return {
+        success: false,
+        message: `No rows matched the provided IDs (${params.ids.join(', ')}); nothing was deleted.`,
+        data: { affectedRows: 0 },
+      };
+    }
 
     this.selectedIds.update((s) => {
       const next = new Set(s);

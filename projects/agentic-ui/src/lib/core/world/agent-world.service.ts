@@ -271,7 +271,7 @@ export class AgentWorldService {
       };
     }
 
-    if (!readable.write) {
+    if (!readable.writable || !readable.write) {
       return {
         success: false,
         message: `Readable "${readableName}" on entry "${entryId}" is not writable.`,

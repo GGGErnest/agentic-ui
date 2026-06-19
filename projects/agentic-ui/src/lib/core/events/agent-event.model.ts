@@ -99,6 +99,12 @@ export interface ToolCallResultEvent extends BaseEvent {
   toolCallId: string;
   content: string;
   role: 'tool' | 'assistant';
+  /**
+   * Internal extension (not part of the AG-UI wire shape): whether the tool
+   * call succeeded. Optional so remote AG-UI servers that omit it still parse;
+   * when absent the reducer treats the result as successful.
+   */
+  success?: boolean;
 }
 
 export interface MessagesSnapshotMessage {
@@ -211,10 +217,7 @@ export function toolCallStart(input: {
   return { type: 'TOOL_CALL_START', timestamp: now(), ...input };
 }
 
-export function toolCallArgs(input: {
-  toolCallId: string;
-  delta: string;
-}): ToolCallArgsEvent {
+export function toolCallArgs(input: { toolCallId: string; delta: string }): ToolCallArgsEvent {
   return { type: 'TOOL_CALL_ARGS', timestamp: now(), ...input };
 }
 
@@ -227,6 +230,7 @@ export function toolCallResult(input: {
   content: string;
   role: 'tool' | 'assistant';
   messageId?: string;
+  success?: boolean;
 }): ToolCallResultEvent {
   return {
     type: 'TOOL_CALL_RESULT',
@@ -235,6 +239,7 @@ export function toolCallResult(input: {
     toolCallId: input.toolCallId,
     content: input.content,
     role: input.role,
+    ...(input.success !== undefined ? { success: input.success } : {}),
   };
 }
 
@@ -257,9 +262,7 @@ export function stateDelta(input: { deltas: JsonPatchOp[] }): StateDeltaEvent {
 
 // ---- Guards ----
 
-export function isRunTerminal(
-  event: AgentEvent,
-): event is RunFinishedEvent | RunErrorEvent {
+export function isRunTerminal(event: AgentEvent): event is RunFinishedEvent | RunErrorEvent {
   return event.type === 'RUN_FINISHED' || event.type === 'RUN_ERROR';
 }
 
@@ -284,8 +287,6 @@ export function isToolEvent(
   );
 }
 
-export function isStateEvent(
-  event: AgentEvent,
-): event is StateSnapshotEvent | StateDeltaEvent {
+export function isStateEvent(event: AgentEvent): event is StateSnapshotEvent | StateDeltaEvent {
   return event.type === 'STATE_SNAPSHOT' || event.type === 'STATE_DELTA';
 }

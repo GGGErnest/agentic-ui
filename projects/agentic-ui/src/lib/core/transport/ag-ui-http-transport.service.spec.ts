@@ -52,4 +52,57 @@ describe('AgUiHttpTransport', () => {
     const err = events.find((e) => e.type === 'RUN_ERROR');
     expect(err).toBeDefined();
   });
+
+  it('forwards the AbortSignal to fetch and emits aborted error when fetch rejects (#G1)', async () => {
+    const fetchSpy = vi.fn(async () => {
+      throw new DOMException('Aborted', 'AbortError');
+    });
+    globalThis.fetch = fetchSpy as unknown as typeof fetch;
+
+    const controller = new AbortController();
+    const events: AgentEvent[] = [];
+    for await (const e of transport.run(
+      { threadId: 't', runId: 'r', messages: [] },
+      controller.signal,
+    )) {
+      events.push(e);
+    }
+
+    // The signal must be passed to fetch.
+    const callArgs = fetchSpy.mock.calls[0] as unknown as [string, RequestInit];
+    expect(callArgs[1].signal).toBe(controller.signal);
+    const err = events.find((e) => e.type === 'RUN_ERROR') as { message?: string } | undefined;
+    expect(err?.message).toBe('aborted');
+    expect(events.at(-1)?.type).toBe('RUN_FINISHED');
+  });
+
+  it('stops draining and emits aborted when the signal is already aborted mid-stream (#G1)', async () => {
+    const controller = new AbortController();
+    const cancelSpy = vi.fn(async () => {});
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller2) {
+        controller2.enqueue(
+          new TextEncoder().encode('data: {"type":"RUN_STARTED","threadId":"t","runId":"r"}\n\n'),
+        );
+        // Do not close — simulate an open stream.
+      },
+      cancel: cancelSpy,
+    });
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(stream, { status: 200, headers: { 'content-type': 'text/event-stream' } }),
+    ) as unknown as typeof fetch;
+
+    // Abort before consuming.
+    controller.abort();
+    const events: AgentEvent[] = [];
+    for await (const e of transport.run(
+      { threadId: 't', runId: 'r', messages: [] },
+      controller.signal,
+    )) {
+      events.push(e);
+    }
+    expect(events.some((e) => e.type === 'RUN_ERROR')).toBe(true);
+    expect(events.at(-1)?.type).toBe('RUN_FINISHED');
+  });
 });

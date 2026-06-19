@@ -5,8 +5,8 @@
  */
 import { Injectable, inject } from '@angular/core';
 import { AgentWorldService } from '../world/agent-world.service';
-import { AgentAction, AgentActionResult } from '../world/agent-action.model';
-import { AgentReadable, AgentReadableResult, AgentWritableResult } from '../state/agent-readable.model';
+import { AgentAction } from '../world/agent-action.model';
+import { AgentReadable } from '../state/agent-readable.model';
 import { AgentJsonSchema, JsonSchemaProperty } from '../schema/agent-json-schema.model';
 import { ToolNameCodec } from '../events/tool-name-codec';
 
@@ -15,11 +15,6 @@ export interface McpTool {
   name: string;
   description: string;
   input_schema?: AgentJsonSchema;
-}
-
-interface ResolvedToolTarget {
-  entryId: string;
-  toolName: string;
 }
 
 /** Result from executing an MCP tool. */
@@ -92,41 +87,47 @@ export class McpToolAdapterService {
 
   /**
    * Execute an MCP tool by name with parameters.
-   * Dispatches to World actions or readables.
+   * Dispatches through the World Registry so MCP callers get the same
+   * approval gate and schema validation as the LLM path.
    */
-  async executeTool(toolName: string, params?: Record<string, unknown>): Promise<McpToolExecutionResult> {
+  async executeTool(
+    toolName: string,
+    params?: Record<string, unknown>,
+  ): Promise<McpToolExecutionResult> {
     try {
-      const target = this.resolveToolTarget(toolName);
-      if (!target) {
+      const kind = this.codec.kind(toolName);
+
+      if (kind === 'action') {
+        const { entryId, actionName } = this.codec.decodeAction(toolName);
+        const result = await this.world.executeAction(entryId, actionName, params);
         return {
-          success: false,
-          message: `Tool not found: ${toolName}`,
-          error: 'TOOL_NOT_FOUND',
+          success: result.success,
+          message: result.message,
+          data: result.data,
+          ...(result.success ? {} : { error: result.message }),
         };
       }
 
-      if (target.toolName.startsWith('read__')) {
-        return this.executeReadTool(target.entryId, target.toolName.substring('read__'.length), params);
+      if (kind === 'read') {
+        const { entryId, readableName } = this.codec.decodeReadable(toolName);
+        return this.executeReadTool(entryId, readableName);
       }
 
-      if (target.toolName.startsWith('write__')) {
-        return this.executeWriteTool(target.entryId, target.toolName.substring('write__'.length), params);
-      }
-
-      const action = this.findAction(target.entryId, target.toolName);
-      if (!action) {
+      if (kind === 'write') {
+        const { entryId, readableName } = this.codec.decodeReadable(toolName);
+        const value = params?.['value'];
+        const result = await this.world.updateReadable(entryId, readableName, value);
         return {
-          success: false,
-          message: `Tool not found: ${toolName}`,
-          error: 'TOOL_NOT_FOUND',
+          success: result.success,
+          message: result.message,
+          ...(result.success ? {} : { error: result.message }),
         };
       }
 
-      const result = await action.execute(params);
       return {
-        success: result.success,
-        message: result.message,
-        data: result.data,
+        success: false,
+        message: `Tool not found: ${toolName}`,
+        error: 'TOOL_NOT_FOUND',
       };
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : String(err);
@@ -142,28 +143,12 @@ export class McpToolAdapterService {
     return this.codec.encodeAction(entryId, actionName);
   }
 
-  private composeReadableToolName(entryId: string, readableName: string, mode: 'read' | 'write'): string {
+  private composeReadableToolName(
+    entryId: string,
+    readableName: string,
+    mode: 'read' | 'write',
+  ): string {
     return this.codec.encodeReadable(entryId, readableName, mode);
-  }
-
-  private resolveToolTarget(toolName: string): ResolvedToolTarget | null {
-    const k = this.codec.kind(toolName);
-    if (k === 'action') {
-      const d = this.codec.decodeAction(toolName);
-      return { entryId: d.entryId, toolName: d.actionName };
-    }
-    if (k === 'read' || k === 'write') {
-      const d = this.codec.decodeReadable(toolName);
-      return { entryId: d.entryId, toolName: `${k}__${d.readableName}` };
-    }
-    return null;
-  }
-
-  /** Find action in a specific entry by name. */
-  private findAction(entryId: string, name: string): AgentAction | null {
-    const entry = this.world.entries().get(entryId);
-    if (!entry) return null;
-    return entry.actions.find((a) => a.name === name) ?? null;
   }
 
   /** Find readable in a specific entry by name. */
@@ -173,11 +158,10 @@ export class McpToolAdapterService {
     return entry.readables?.find((r) => r.name === name) ?? null;
   }
 
-  /** Execute a read pseudo-tool. */
+  /** Execute a read pseudo-tool. Reads are non-mutating and bypass the gate. */
   private async executeReadTool(
     entryId: string,
     readableName: string,
-    _params?: Record<string, unknown>
   ): Promise<McpToolExecutionResult> {
     const readable = this.findReadable(entryId, readableName);
     if (!readable) {
@@ -193,46 +177,6 @@ export class McpToolAdapterService {
       success: result.success,
       message: result.message,
       data: result.value,
-    };
-  }
-
-  /** Execute a write pseudo-tool. */
-  private async executeWriteTool(
-    entryId: string,
-    readableName: string,
-    params?: Record<string, unknown>
-  ): Promise<McpToolExecutionResult> {
-    const readable = this.findReadable(entryId, readableName);
-    if (!readable) {
-      return {
-        success: false,
-        message: `Readable not found: ${readableName}`,
-        error: 'READABLE_NOT_FOUND',
-      };
-    }
-
-    if (!readable.writable) {
-      return {
-        success: false,
-        message: `Readable is not writable: ${readableName}`,
-        error: 'NOT_WRITABLE',
-      };
-    }
-
-    const value = params?.['value'];
-    const result = await readable.write?.(value);
-
-    if (!result) {
-      return {
-        success: false,
-        message: `Write method not implemented`,
-        error: 'NOT_IMPLEMENTED',
-      };
-    }
-
-    return {
-      success: result.success,
-      message: result.message,
     };
   }
 

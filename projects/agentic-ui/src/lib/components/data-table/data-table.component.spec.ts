@@ -123,6 +123,31 @@ describe('DataTableComponent', () => {
     expect(comp['selectedIds']().has('2')).toBe(true);
   });
 
+  it('bulkEdit: fails when no IDs match the data (#L1)', async () => {
+    const { comp } = createComponent();
+    const emitSpy = vi.spyOn(comp.bulkEdited, 'emit');
+    const r = await getAction(comp, 'bulkEdit').execute({
+      ids: ['999'],
+      changes: { team: 'X' },
+    });
+    expect(r.success).toBe(false);
+    expect(emitSpy).not.toHaveBeenCalled();
+  });
+
+  it('bulkDelete: fails when no IDs match the data (#L1)', async () => {
+    const { comp } = createComponent();
+    const emitSpy = vi.spyOn(comp.rowsDeleted, 'emit');
+    const r = await getAction(comp, 'bulkDelete').execute({ ids: ['999'] });
+    expect(r.success).toBe(false);
+    expect(emitSpy).not.toHaveBeenCalled();
+  });
+
+  it('findRow: preserves the original (non-lowercased) filter text (#L2)', async () => {
+    const { comp } = createComponent();
+    await getAction(comp, 'findRow').execute({ column: 'name', value: 'Alice' });
+    expect(comp['filterText']()).toBe('Alice');
+  });
+
   it('sortBy: sorts ascending', async () => {
     const { comp } = createComponent();
     await getAction(comp, 'sortBy').execute({ column: 'name', direction: 'asc' });

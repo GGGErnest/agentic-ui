@@ -47,6 +47,8 @@ export class AgenticDirective implements OnDestroy {
   readonly metadata = input<Record<string, unknown>>({});
 
   private registeredId: string | null = null;
+  /** Elements this directive set `data-agentic-id` on, cleared on destroy. */
+  private taggedElements = new Set<HTMLElement>();
 
   constructor() {
     effect(() => {
@@ -63,8 +65,10 @@ export class AgenticDirective implements OnDestroy {
 
       const elementToRegister = this.agenticElement() ?? this.el.nativeElement;
       this.el.nativeElement.setAttribute('data-agentic-id', id);
+      this.taggedElements.add(this.el.nativeElement);
       if (elementToRegister !== this.el.nativeElement) {
         elementToRegister.setAttribute('data-agentic-id', id);
+        this.taggedElements.add(elementToRegister);
       }
 
       if (this.registeredId && this.registeredId !== id) {
@@ -81,5 +85,11 @@ export class AgenticDirective implements OnDestroy {
     if (this.registeredId) {
       this.world.unregister(this.registeredId);
     }
+    // Remove the data-agentic-id attribute(s) this directive set so reused DOM
+    // doesn't carry a stale id.
+    for (const el of this.taggedElements) {
+      el.removeAttribute('data-agentic-id');
+    }
+    this.taggedElements.clear();
   }
 }

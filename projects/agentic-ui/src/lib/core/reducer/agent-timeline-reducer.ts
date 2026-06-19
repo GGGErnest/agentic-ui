@@ -131,14 +131,19 @@ export function reduceAgentTimeline(
     }
 
     case 'TOOL_CALL_RESULT': {
+      const failed = event.success === false;
       const toolCalls = state.toolCalls.map((t) =>
         t.id === event.toolCallId
-          ? { ...t, status: 'complete' as const, result: event.content, success: true }
+          ? {
+              ...t,
+              status: (failed ? 'error' : 'complete') as AgentToolCallState['status'],
+              result: event.content,
+              success: !failed,
+              ...(failed ? { error: event.content } : {}),
+            }
           : t,
       );
-      const hasTool = state.timeline.some(
-        (t) => t.kind === 'tool' && t.id === event.toolCallId,
-      );
+      const hasTool = state.timeline.some((t) => t.kind === 'tool' && t.id === event.toolCallId);
       const timeline = hasTool
         ? state.timeline
         : [...state.timeline, { kind: 'tool' as const, id: event.toolCallId }];
@@ -150,6 +155,14 @@ export function reduceAgentTimeline(
     case 'MESSAGES_SNAPSHOT':
     case 'STATE_SNAPSHOT':
     case 'STATE_DELTA': {
+      return state;
+    }
+
+    default: {
+      // Exhaustiveness guard: if a new event type is added to the union without
+      // a case here, this assignment fails to compile.
+      const _exhaustive: never = event;
+      void _exhaustive;
       return state;
     }
   }

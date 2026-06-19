@@ -391,7 +391,7 @@ export class AgentHarness {
    * @returns A flat array of emitted events. The first event is `RUN_STARTED`
    *          and the last is always `RUN_FINISHED`.
    */
-  async runWithEvents(userPrompt: string): Promise<AgentEvent[]> {
+  async runWithEvents(userPrompt: string, signal?: AbortSignal): Promise<AgentEvent[]> {
     const events: AgentEvent[] = [];
     const record = (event: AgentEvent) => {
       events.push(event);
@@ -416,12 +416,15 @@ export class AgentHarness {
       return msg;
     });
 
-    for await (const event of this.transport.run({
-      threadId,
-      runId,
-      messages,
-      systemPrompt: this.systemPrompt,
-    })) {
+    for await (const event of this.transport.run(
+      {
+        threadId,
+        runId,
+        messages,
+        systemPrompt: this.systemPrompt,
+      },
+      signal,
+    )) {
       record(event);
     }
 
@@ -433,7 +436,7 @@ export class AgentHarness {
    * `resume` method. The transport consumes the pending interrupts and
    * processes each resume decision.
    */
-  async resume(input: AgentRunInput): Promise<AgentEvent[]> {
+  async resume(input: AgentRunInput, signal?: AbortSignal): Promise<AgentEvent[]> {
     const events: AgentEvent[] = [];
     const record = (event: AgentEvent) => {
       events.push(event);
@@ -444,7 +447,7 @@ export class AgentHarness {
       this.systemPrompt = input.systemPrompt;
     }
 
-    for await (const event of this.transport.resume(input)) {
+    for await (const event of this.transport.resume(input, signal)) {
       record(event);
     }
 

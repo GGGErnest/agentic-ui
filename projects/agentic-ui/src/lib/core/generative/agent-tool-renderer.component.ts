@@ -2,6 +2,7 @@ import {
   ChangeDetectionStrategy,
   Component,
   ComponentRef,
+  DestroyRef,
   effect,
   EnvironmentInjector,
   inject,
@@ -34,33 +35,52 @@ export class AgentToolRendererComponent {
 
   private readonly injector = inject(Injector);
   private readonly envInjector = inject(EnvironmentInjector);
+  private readonly destroyRef = inject(DestroyRef);
   private ref: ComponentRef<unknown> | null = null;
+  /** The component type currently mounted, so we can detect a type swap. */
+  private currentType: Type<unknown> | null = null;
 
   readonly componentType = input<Type<unknown> | null>(null);
   readonly context = input.required<Signal<ToolRenderContext>>();
-  readonly renderInputs = input<
-    ((ctx: ToolRenderContext) => Record<string, unknown>) | undefined
-  >(undefined);
+  readonly renderInputs = input<((ctx: ToolRenderContext) => Record<string, unknown>) | undefined>(
+    undefined,
+  );
 
   constructor() {
     runInInjectionContext(this.injector, () => {
       effect(() => {
         const ctx = this.context()();
         const t = this.componentType();
-        if (!t) {
+
+        // Tear down when there is no component, or when the type changed.
+        if (!t || t !== this.currentType) {
           this.ref?.destroy();
           this.ref = null;
+          this.currentType = null;
+        }
+
+        if (!t) {
           return;
         }
+
         if (!this.ref) {
           this.ref = this.host.createComponent(t, { injector: this.envInjector });
+          this.currentType = t;
         }
+
         const inputs = (this.renderInputs() ?? defaultRenderInputs)(ctx);
         for (const [key, value] of Object.entries(inputs)) {
           this.ref.setInput(key, value);
         }
         this.ref.changeDetectorRef.detectChanges();
       });
+    });
+
+    // Ensure the dynamically created component is destroyed with the host.
+    this.destroyRef.onDestroy(() => {
+      this.ref?.destroy();
+      this.ref = null;
+      this.currentType = null;
     });
   }
 }

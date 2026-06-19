@@ -29,7 +29,7 @@ export class RuntimeProxyService {
     this.headers[name] = value;
   }
 
-  async *streamEvents(input: AgentRunInput): AsyncIterable<AgentEvent> {
+  async *streamEvents(input: AgentRunInput, signal?: AbortSignal): AsyncIterable<AgentEvent> {
     const { threadId, runId } = input;
 
     let response: Response;
@@ -38,9 +38,11 @@ export class RuntimeProxyService {
         method: 'POST',
         headers: this.headers,
         body: JSON.stringify(input),
+        signal,
       });
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
+      const aborted = isAbortError(err);
+      const message = aborted ? 'aborted' : err instanceof Error ? err.message : String(err);
       yield runError({ threadId, runId, message });
       yield runFinished({ threadId, runId, outcome: 'error' });
       return;
@@ -59,17 +61,43 @@ export class RuntimeProxyService {
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = '';
+    let aborted = false;
     try {
       while (true) {
+        if (signal?.aborted) {
+          aborted = true;
+          break;
+        }
         const { done, value } = await reader.read();
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         buffer = yield* drainSseFrames(buffer);
       }
-      buffer += decoder.decode();
-      buffer = yield* drainSseFrames(buffer);
+      if (!aborted) {
+        buffer += decoder.decode();
+        buffer = yield* drainSseFrames(buffer);
+      }
+    } catch (err) {
+      if (isAbortError(err)) {
+        aborted = true;
+      } else {
+        throw err;
+      }
     } finally {
+      void reader.cancel().catch(() => {});
       reader.releaseLock();
     }
+
+    if (aborted) {
+      yield runError({ threadId, runId, message: 'aborted' });
+      yield runFinished({ threadId, runId, outcome: 'error' });
+    }
   }
+}
+
+function isAbortError(err: unknown): boolean {
+  return (
+    (err instanceof DOMException && err.name === 'AbortError') ||
+    (err instanceof Error && err.name === 'AbortError')
+  );
 }

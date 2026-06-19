@@ -37,4 +37,19 @@ describe('AgentShellComponent', () => {
     expect(window.Agent).toBeUndefined();
     fixture.destroy();
   });
+
+  it('aborts the in-flight run controller on destroy (#I1)', () => {
+    const fixture = TestBed.createComponent(AgentShellComponent);
+    fixture.detectChanges();
+    const component = fixture.componentInstance;
+
+    // Simulate an active run with an AbortController.
+    const controller = new AbortController();
+    const abortSpy = vi.spyOn(controller, 'abort');
+    (component as unknown as { abortController: AbortController | null }).abortController =
+      controller;
+
+    fixture.destroy();
+    expect(abortSpy).toHaveBeenCalled();
+  });
 });

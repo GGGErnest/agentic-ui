@@ -8,8 +8,13 @@ import { McpToolAdapterService, McpTool } from './mcp-tool-adapter.service';
 import { AgentWorldService } from '../world/agent-world.service';
 import { WorldEntry, ToolDefinition } from '../world/world-entry.interface';
 import { AgentAction, AgentActionResult } from '../world/agent-action.model';
-import { AgentReadable, AgentReadableResult, AgentWritableResult } from '../state/agent-readable.model';
+import {
+  AgentReadable,
+  AgentReadableResult,
+  AgentWritableResult,
+} from '../state/agent-readable.model';
 import { AgentJsonSchema } from '../schema/agent-json-schema.model';
+import { AgentApprovalService } from '../approval/agent-approval.service';
 
 // ---- Helpers ----
 
@@ -52,7 +57,11 @@ function createMockReadable(name: string, writable = false): AgentReadable {
   };
 }
 
-function createMockWorldEntry(id: string, actions: AgentAction[], readables: AgentReadable[]): WorldEntry {
+function createMockWorldEntry(
+  id: string,
+  actions: AgentAction[],
+  readables: AgentReadable[],
+): WorldEntry {
   return {
     id,
     role: 'mock-component',
@@ -133,7 +142,9 @@ describe('McpToolAdapterService', () => {
       const entry = createMockWorldEntry('test-comp', [action], []);
       world.register(entry);
 
-      const result = await adapter.executeTool('test-comp__action__do_something', { param1: 'value' });
+      const result = await adapter.executeTool('test-comp__action__do_something', {
+        param1: 'value',
+      });
 
       expect(result.success).toBe(true);
       expect(result.data).toEqual({ result: 'success' });
@@ -149,7 +160,8 @@ describe('McpToolAdapterService', () => {
       const result = await adapter.executeTool('test-comp__action__failing_action');
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Action failed');
+      // Routed through the world gate, which wraps the thrown message.
+      expect(result.message).toContain('Action failed');
     });
 
     it('returns error for non-existent tool', async () => {
@@ -176,7 +188,9 @@ describe('McpToolAdapterService', () => {
       const entry = createMockWorldEntry('test-comp', [], [readable]);
       world.register(entry);
 
-      const result = await adapter.executeTool('test-comp__write__my_state', { value: 'new-value' });
+      const result = await adapter.executeTool('test-comp__write__my_state', {
+        value: 'new-value',
+      });
 
       expect(result.success).toBe(true);
       expect(readable.write).toHaveBeenCalledWith('new-value');
@@ -187,10 +201,34 @@ describe('McpToolAdapterService', () => {
       const entry = createMockWorldEntry('test-comp', [], [readable]);
       world.register(entry);
 
-      const result = await adapter.executeTool('test-comp__write__my_state', { value: 'new-value' });
+      const result = await adapter.executeTool('test-comp__write__my_state', {
+        value: 'new-value',
+      });
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('NOT_WRITABLE');
+      // World gate reports a non-writable readable.
+      expect(result.message).toMatch(/not writable/i);
+    });
+
+    it('routes approval-required actions through the world gate (#J1)', async () => {
+      const approval = TestBed.inject(AgentApprovalService);
+      const execute = vi.fn().mockResolvedValue({ success: true, message: 'done' });
+      const entry = createMockWorldEntry(
+        'test-comp',
+        [{ name: 'danger', description: 'risky', requiresApproval: true, execute }],
+        [],
+      );
+      world.register(entry);
+
+      const resultPromise = adapter.executeTool('test-comp__action__danger', {});
+      // Action must NOT execute until approval is granted.
+      expect(execute).not.toHaveBeenCalled();
+      expect(approval.isPending()).toBe(true);
+
+      approval.approve();
+      const result = await resultPromise;
+      expect(execute).toHaveBeenCalled();
+      expect(result.success).toBe(true);
     });
   });
 });

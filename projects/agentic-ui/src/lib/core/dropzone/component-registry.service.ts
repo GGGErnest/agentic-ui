@@ -1,4 +1,4 @@
-import { Injectable, Signal, Type, signal } from '@angular/core';
+import { DestroyRef, inject, Injectable, Signal, Type, signal } from '@angular/core';
 
 export interface ComponentMetadata {
   [key: string]: unknown;
@@ -85,5 +85,30 @@ export class ComponentRegistry {
    */
   clear(): void {
     this.registry.update(() => new Map());
+  }
+
+  /**
+   * Register a component and automatically unregister it when the current
+   * injection context (component/directive) is destroyed. Must be called from
+   * within an injection context (e.g. a component constructor or field
+   * initializer) because it uses `inject(DestroyRef)`.
+   *
+   * @returns A manual teardown function (also invoked automatically on destroy).
+   */
+  registerScoped(
+    id: string,
+    component: Type<unknown>,
+    metadata: ComponentMetadata = {},
+  ): () => void {
+    this.register(id, component, metadata);
+    const destroyRef = inject(DestroyRef);
+    let cleaned = false;
+    const teardown = () => {
+      if (cleaned) return;
+      cleaned = true;
+      this.unregister(id);
+    };
+    destroyRef.onDestroy(teardown);
+    return teardown;
   }
 }

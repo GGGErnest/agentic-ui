@@ -108,6 +108,15 @@ describe('AgenticDirective', () => {
     expect(entry!.actions[0].name).toBe('click');
   });
 
+  it('removes the data-agentic-id attribute on destroy (#M)', () => {
+    const fixture = TestBed.createComponent(TestNativeComponent);
+    fixture.detectChanges();
+    const tagged = fixture.nativeElement.querySelector('[data-agentic-id]');
+    expect(tagged).not.toBeNull();
+    fixture.destroy();
+    expect(fixture.nativeElement.querySelector('[data-agentic-id]')).toBeNull();
+  });
+
   it('auto-generates UUID when agenticId input and token are absent', () => {
     const fixture = TestBed.createComponent(TestNoIdComponent);
     fixture.detectChanges();

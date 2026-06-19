@@ -1,4 +1,5 @@
 import {
+  afterEveryRender,
   afterNextRender,
   ChangeDetectionStrategy,
   Component,
@@ -131,6 +132,18 @@ export class AgentShellComponent {
   }
 
   constructor() {
+    // Auto-scroll: when relevant state changes, flag a scroll to run after the
+    // next render commits (tied to the render lifecycle, not a magic timeout).
+    afterEveryRender(() => {
+      if (!this.pendingScroll) return;
+      this.pendingScroll = false;
+      const ref = this.stepsContainer();
+      if (ref) {
+        const el = ref.nativeElement;
+        el.scrollTop = el.scrollHeight;
+      }
+    });
+
     // Reactive Auto-Scrolling Effect tracking step history logs, thought streams,
     // and the reducer-projected shell state.
     effect(() => {
@@ -144,36 +157,39 @@ export class AgentShellComponent {
     // Maintenance effect: keeps the renderContexts Map and _renderedKeys signal
     // in sync with the harness's toolCalls. Writes a signal so the computed above
     // recomputes when the set of rendered tools changes.
-    effect(() => {
-      const tcs = this.harness.state().toolCalls;
-      const liveIds = new Set(tcs.map((tc) => tc.id));
+    effect(
+      () => {
+        const tcs = this.harness.state().toolCalls;
+        const liveIds = new Set(tcs.map((tc) => tc.id));
 
-      for (const tc of tcs) {
-        const { entryId, actionName } = this.codec.decodeAction(tc.name);
-        const entry = this.world.entries().get(entryId);
-        const action = entry?.actions.find((a) => a.name === actionName);
-        if (!action?.renderComponent) continue;
-        const ctx = this.buildRenderContext(tc, entryId, actionName);
-        let sig = this.renderContexts.get(tc.id);
-        if (!sig) {
-          sig = signal<ToolRenderContext>(ctx);
-          this.renderContexts.set(tc.id, sig);
-        } else {
-          sig.set(ctx);
+        for (const tc of tcs) {
+          const { entryId, actionName } = this.codec.decodeAction(tc.name);
+          const entry = this.world.entries().get(entryId);
+          const action = entry?.actions.find((a) => a.name === actionName);
+          if (!action?.renderComponent) continue;
+          const ctx = this.buildRenderContext(tc, entryId, actionName);
+          let sig = this.renderContexts.get(tc.id);
+          if (!sig) {
+            sig = signal<ToolRenderContext>(ctx);
+            this.renderContexts.set(tc.id, sig);
+          } else {
+            sig.set(ctx);
+          }
         }
-      }
 
-      for (const id of [...this.renderContexts.keys()]) {
-        if (!liveIds.has(id)) this.renderContexts.delete(id);
-      }
+        for (const id of [...this.renderContexts.keys()]) {
+          if (!liveIds.has(id)) this.renderContexts.delete(id);
+        }
 
-      this._renderedKeys.set([...liveIds]);
-    }, { allowSignalWrites: true });
+        this._renderedKeys.set([...liveIds]);
+      },
+      { allowSignalWrites: true },
+    );
 
     // Dev-only: expose window.Agent debugger after first render.
     afterNextRender(() => {
       if (isDevMode() && typeof (globalThis as { vi?: unknown }).vi === 'undefined') {
-        window.Agent = {
+        const hook: Record<string, () => unknown> = {
           snapshot: () => this.world.snapshot(),
           world: () => this.world.entries(),
           visible: () => this.world.activeEntries(),
@@ -189,12 +205,25 @@ export class AgentShellComponent {
             visibleCount: this.world.activeEntries().size,
           }),
         };
+        this.devHook = hook;
+        window.Agent = hook;
       }
     });
   }
 
+  /** This instance's dev hook object, so destroy only removes its own. */
+  private devHook: Record<string, () => unknown> | null = null;
+
   private readonly destroyEffect = this.destroyRef.onDestroy(() => {
-    delete window.Agent;
+    // Abort any in-flight run so the loop doesn't keep going after teardown.
+    this.abortController?.abort();
+    this.abortController = null;
+    // Only remove the global hook if this instance owns it (avoid clobbering
+    // another shell instance's hook).
+    if (this.devHook && window.Agent === this.devHook) {
+      delete window.Agent;
+    }
+    this.devHook = null;
   });
 
   get label(): string {
@@ -226,14 +255,11 @@ export class AgentShellComponent {
     this.userInput.set(prompt);
   }
 
+  /** Flags that the steps container should scroll to the bottom after next render. */
+  private pendingScroll = false;
+
   private scrollToBottom(): void {
-    setTimeout(() => {
-      const ref = this.stepsContainer();
-      if (ref) {
-        const el = ref.nativeElement;
-        el.scrollTop = el.scrollHeight;
-      }
-    }, 50);
+    this.pendingScroll = true;
   }
 
   toggleShadowMode(): void {

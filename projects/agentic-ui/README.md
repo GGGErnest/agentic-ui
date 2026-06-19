@@ -420,10 +420,23 @@ import { AGENT_TRANSPORT, AgUiHttpTransport } from 'agentic-ui';
 }
 ```
 
+#### Cancellation
+
+`AgentTransport.run`/`resume` accept an optional `AbortSignal`, threaded from
+`AgentHarness.runWithEvents(prompt, signal)` / `resume(input, signal)`. The HTTP
+and runtime-proxy transports forward it to `fetch` and cancel the response
+reader; on abort they emit `RUN_ERROR` (message `"aborted"`) followed by
+`RUN_FINISHED(outcome:'error')`. This lets a "stop" button actually cancel the
+underlying network stream.
+
 ### Local MCP server (WebSocket)
 
 `McpToolAdapterService` converts the World Registry into MCP tool definitions
-and executes incoming `tools/call` requests.
+and executes incoming `tools/call` requests. Tool execution is routed through
+`AgentWorldService`, so MCP callers get the **same approval gate and schema
+validation** as the LLM path — an `requiresApproval` action invoked over MCP
+still pauses for human confirmation. Unknown JSON-RPC methods return a proper
+`METHOD_NOT_FOUND` error rather than being treated as tool calls.
 `WebsocketTransportService` exposes the registry to a local MCP server:
 
 ```ts
@@ -432,6 +445,7 @@ import { WebsocketTransportService } from 'agentic-ui';
 const ws = inject(WebsocketTransportService);
 await ws.connect('ws://localhost:8765');
 // ws.reconnectState() -> { state: WebSocketState, ... } with exponential backoff
+// ws.disconnect() stops auto-reconnect and rejects any in-flight requests.
 ```
 
 ---
@@ -474,6 +488,17 @@ import { ComponentRegistry } from 'agentic-ui';
 
 const registry = inject(ComponentRegistry);
 registry.register('statusCard', AgentStatusCardComponent);
+```
+
+`ComponentRegistry` is application-scoped (root) and registrations persist
+until removed. When you register from a component that comes and goes, use
+`registerScoped` from within its injection context to auto-unregister on
+destroy:
+
+```ts
+constructor() {
+  inject(ComponentRegistry).registerScoped('statusCard', AgentStatusCardComponent);
+}
 ```
 
 2. Add a dropzone host:

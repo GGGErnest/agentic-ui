@@ -88,6 +88,42 @@ describe('DirectLLMTransport', () => {
     expect(events).toContain('TOOL_CALL_RESULT');
   });
 
+  it('propagates success:false on a failed action result (#F1)', async () => {
+    world.register({
+      id: 'btn',
+      role: 'B',
+      actions: [
+        {
+          name: 'click',
+          description: 'c',
+          execute: vi.fn().mockResolvedValue({ success: false, message: 'nope' }),
+        },
+      ],
+    });
+    vi.mocked(mockLLM.getStream)
+      .mockReturnValueOnce(
+        new AsyncChunks([
+          {
+            type: 'tool_call',
+            data: { id: 'c1', function: { name: 'btn__action__click', arguments: '{}' } },
+          },
+        ]),
+      )
+      .mockReturnValue(new AsyncChunks([{ type: 'content', text: 'done' }]));
+
+    const results: AgentEvent[] = [];
+    for await (const e of transport.run({
+      threadId: 't',
+      runId: 'r',
+      messages: [{ id: 'm1', role: 'user', content: 'go' }],
+    })) {
+      if (e.type === 'TOOL_CALL_RESULT') results.push(e);
+    }
+    const r = results[0] as { success?: boolean; content: string };
+    expect(r.success).toBe(false);
+    expect(r.content).toBe('nope');
+  });
+
   it('loops multiple turns until the model emits no tool calls (#7)', async () => {
     const execute = vi.fn().mockResolvedValue({ success: true, message: 'ok' });
     world.register({

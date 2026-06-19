@@ -1,8 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import {
-  initialAgentTimelineState,
-  type AgentTimelineState,
-} from './agent-state.model';
+import { initialAgentTimelineState, type AgentTimelineState } from './agent-state.model';
 import { reduceAgentTimeline } from './agent-timeline-reducer';
 import {
   runStarted,
@@ -43,7 +40,10 @@ describe('reduceAgentTimeline', () => {
 
   it('tracks tool call states through to result', () => {
     let s: AgentTimelineState = initialAgentTimelineState;
-    s = reduceAgentTimeline(s, toolCallStart({ toolCallId: 'c1', toolCallName: 'tbl__action__del' }));
+    s = reduceAgentTimeline(
+      s,
+      toolCallStart({ toolCallId: 'c1', toolCallName: 'tbl__action__del' }),
+    );
     s = reduceAgentTimeline(s, toolCallArgs({ toolCallId: 'c1', delta: '{"id":1}' }));
     s = reduceAgentTimeline(s, toolCallEnd({ toolCallId: 'c1' }));
     expect(s.toolCalls[0].status).toBe('executing');
@@ -53,6 +53,22 @@ describe('reduceAgentTimeline', () => {
     );
     expect(s.toolCalls[0].status).toBe('complete');
     expect(s.toolCalls[0].result).toBe('deleted');
+  });
+
+  it('marks a failed tool result as error with the message (#F1)', () => {
+    let s: AgentTimelineState = initialAgentTimelineState;
+    s = reduceAgentTimeline(
+      s,
+      toolCallStart({ toolCallId: 'c1', toolCallName: 'tbl__action__del' }),
+    );
+    s = reduceAgentTimeline(s, toolCallEnd({ toolCallId: 'c1' }));
+    s = reduceAgentTimeline(
+      s,
+      toolCallResult({ toolCallId: 'c1', content: 'boom', role: 'tool', success: false }),
+    );
+    expect(s.toolCalls[0].status).toBe('error');
+    expect(s.toolCalls[0].success).toBe(false);
+    expect(s.toolCalls[0].error).toBe('boom');
   });
 
   it('RUN_FINISHED outcome=interrupt populates interrupts and sets status=interrupted', () => {
@@ -94,18 +110,12 @@ describe('reduceAgentTimeline', () => {
     s = reduceAgentTimeline(s, textMessageContent({ messageId: 'm1', delta: 'hi' }));
     s = reduceAgentTimeline(s, textMessageEnd({ messageId: 'm1' }));
     s = reduceAgentTimeline(s, toolCallStart({ toolCallId: 'c1', toolCallName: 'fn' }));
-    s = reduceAgentTimeline(
-      s,
-      toolCallResult({ toolCallId: 'c1', content: 'ok', role: 'tool' }),
-    );
+    s = reduceAgentTimeline(s, toolCallResult({ toolCallId: 'c1', content: 'ok', role: 'tool' }));
     expect(s.timeline).toEqual([
       { kind: 'message', id: 'm1' },
       { kind: 'tool', id: 'c1' },
     ]);
-    s = reduceAgentTimeline(
-      s,
-      toolCallResult({ toolCallId: 'c1', content: 'ok', role: 'tool' }),
-    );
+    s = reduceAgentTimeline(s, toolCallResult({ toolCallId: 'c1', content: 'ok', role: 'tool' }));
     expect(s.timeline).toHaveLength(2);
   });
 });

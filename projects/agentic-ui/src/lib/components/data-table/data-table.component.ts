@@ -1,5 +1,6 @@
 import { ChangeDetectionStrategy, Component, computed, input, output, signal } from '@angular/core';
 import { AgentAction, AgentActionResult } from '../../core/world/agent-action.model';
+import { AgentTool, collectAgentTools } from '../../core/world/agent-tool.decorator';
 import { AGENTIC_COMPONENT } from '../../core/world/agentic-component.token';
 import { AgenticDirective } from '../../directives/agentic.directive';
 import { DataRow, RowQuery, BulkEditOp } from './data-table.models';
@@ -35,8 +36,10 @@ export class DataTableComponent {
   readonly agenticId = input.required<string>();
   readonly agenticRole = 'DataTable';
 
+  private _agenticActions?: AgentAction[];
+
   get agenticActions(): AgentAction[] {
-    return this._agenticActions;
+    return (this._agenticActions ??= collectAgentTools(this));
   }
 
   get agenticMetadata(): Record<string, unknown> {
@@ -107,83 +110,8 @@ export class DataTableComponent {
   });
 
   // ---- Agentic Actions (Facade API) ----
-
-  private readonly _agenticActions: AgentAction[] = [
-    {
-      name: 'findRow',
-      description: 'Find rows matching a column value. Returns matching rows.',
-      parameters: [
-        { name: 'column', type: 'string', description: 'Column to search in' },
-        { name: 'value', type: 'string', description: 'Value to match' },
-      ],
-      execute: (params) => this.doFindRow(params as unknown as RowQuery),
-    },
-    {
-      name: 'bulkEdit',
-      description: 'Edit multiple rows at once. Pass an array of IDs and the changes to apply.',
-      parameters: [
-        { name: 'ids', type: 'array', description: 'Array of row IDs to edit', required: true },
-        {
-          name: 'changes',
-          type: 'object',
-          description: 'Key-value changes to apply',
-          required: true,
-        },
-      ],
-      requiresApproval: true,
-      execute: (params) => this.doBulkEdit(params as unknown as BulkEditOp),
-    },
-    {
-      name: 'bulkDelete',
-      description: 'Delete multiple rows at once. Pass an array of row IDs.',
-      parameters: [
-        { name: 'ids', type: 'array', description: 'Array of row IDs to delete', required: true },
-      ],
-      requiresApproval: true,
-      execute: (params) => this.doBulkDelete(params as unknown as { ids: string[] }),
-    },
-    {
-      name: 'sortBy',
-      description: 'Sort the table by a column.',
-      parameters: [
-        { name: 'column', type: 'string', description: 'Column name to sort by', required: true },
-        { name: 'direction', type: 'string', description: 'asc or desc', enum: ['asc', 'desc'] },
-      ],
-      execute: (params) =>
-        this.doSortBy(params as unknown as { column: string; direction?: string }),
-    },
-    {
-      name: 'filterBy',
-      description: 'Filter rows by column value (partial match).',
-      parameters: [
-        { name: 'column', type: 'string', description: 'Column to filter', required: true },
-        { name: 'value', type: 'string', description: 'Value to filter by', required: true },
-      ],
-      execute: (params) => this.doFilterBy(params as unknown as { column: string; value: string }),
-    },
-    {
-      name: 'clearFilter',
-      description: 'Clear the current table filter and show all rows.',
-      execute: () => this.doClearFilter(),
-    },
-    {
-      name: 'selectRow',
-      description: 'Select a row by ID for subsequent operations.',
-      parameters: [{ name: 'id', type: 'string', description: 'Row ID', required: true }],
-      execute: (params) => this.doSelectRow(params as unknown as { id: string }),
-    },
-    {
-      name: 'getSnapshot',
-      description: 'Get a summary of the current data (column names, row count, selected rows).',
-      execute: () => this.doGetSnapshot(),
-    },
-    {
-      name: 'editRow',
-      description: 'Open the edit form for a row by its ID.',
-      parameters: [{ name: 'id', type: 'string', description: 'Row ID to edit', required: true }],
-      execute: (params) => this.doEditRow(params as unknown as { id: string }),
-    },
-  ];
+  // Action metadata is co-located with each implementation via @AgentTool.
+  // `agenticActions` collects them lazily through collectAgentTools(this).
 
   // ---- UI helpers ----
 
@@ -227,6 +155,14 @@ export class DataTableComponent {
 
   // ---- Agentic action implementations ----
 
+  @AgentTool({
+    name: 'findRow',
+    description: 'Find rows matching a column value. Returns matching rows.',
+    parameters: [
+      { name: 'column', type: 'string', description: 'Column to search in' },
+      { name: 'value', type: 'string', description: 'Value to match' },
+    ],
+  })
   private async doFindRow(query: RowQuery): Promise<AgentActionResult> {
     const column = query.column ?? this.columns()[0];
     const rawValue = query.value;
@@ -259,6 +195,20 @@ export class DataTableComponent {
     };
   }
 
+  @AgentTool({
+    name: 'bulkEdit',
+    description: 'Edit multiple rows at once. Pass an array of IDs and the changes to apply.',
+    parameters: [
+      { name: 'ids', type: 'array', description: 'Array of row IDs to edit', required: true },
+      {
+        name: 'changes',
+        type: 'object',
+        description: 'Key-value changes to apply',
+        required: true,
+      },
+    ],
+    requiresApproval: true,
+  })
   private async doBulkEdit(op: BulkEditOp): Promise<AgentActionResult> {
     if (!op.ids?.length) {
       return { success: false, message: 'No row IDs provided for bulk edit.' };
@@ -285,6 +235,14 @@ export class DataTableComponent {
     };
   }
 
+  @AgentTool({
+    name: 'bulkDelete',
+    description: 'Delete multiple rows at once. Pass an array of row IDs.',
+    parameters: [
+      { name: 'ids', type: 'array', description: 'Array of row IDs to delete', required: true },
+    ],
+    requiresApproval: true,
+  })
   private async doBulkDelete(params: { ids: string[] }): Promise<AgentActionResult> {
     if (!params.ids?.length) {
       return { success: false, message: 'No row IDs provided for deletion.' };
@@ -317,6 +275,14 @@ export class DataTableComponent {
     };
   }
 
+  @AgentTool({
+    name: 'sortBy',
+    description: 'Sort the table by a column.',
+    parameters: [
+      { name: 'column', type: 'string', description: 'Column name to sort by', required: true },
+      { name: 'direction', type: 'string', description: 'asc or desc', enum: ['asc', 'desc'] },
+    ],
+  })
   private async doSortBy(params: {
     column: string;
     direction?: string;
@@ -332,6 +298,14 @@ export class DataTableComponent {
     return { success: true, message: `Sorted by "${params.column}" ${this.sortDirection()}.` };
   }
 
+  @AgentTool({
+    name: 'filterBy',
+    description: 'Filter rows by column value (partial match).',
+    parameters: [
+      { name: 'column', type: 'string', description: 'Column to filter', required: true },
+      { name: 'value', type: 'string', description: 'Value to filter by', required: true },
+    ],
+  })
   private async doFilterBy(params: { column: string; value: string }): Promise<AgentActionResult> {
     if (!this.columns().includes(params.column)) {
       return {
@@ -348,12 +322,21 @@ export class DataTableComponent {
     };
   }
 
+  @AgentTool({
+    name: 'clearFilter',
+    description: 'Clear the current table filter and show all rows.',
+  })
   private async doClearFilter(): Promise<AgentActionResult> {
     this.filterColumn.set('');
     this.filterText.set('');
     return { success: true, message: 'Table filter cleared.' };
   }
 
+  @AgentTool({
+    name: 'selectRow',
+    description: 'Select a row by ID for subsequent operations.',
+    parameters: [{ name: 'id', type: 'string', description: 'Row ID', required: true }],
+  })
   private async doSelectRow(params: { id: string }): Promise<AgentActionResult> {
     const row = this.data().find((r) => String(r[this.idField()]) === params.id);
     if (!row) {
@@ -368,6 +351,10 @@ export class DataTableComponent {
     };
   }
 
+  @AgentTool({
+    name: 'getSnapshot',
+    description: 'Get a summary of the current data (column names, row count, selected rows).',
+  })
   private async doGetSnapshot(): Promise<AgentActionResult> {
     const selIds = [...this.selectedIds()];
     return {
@@ -386,6 +373,11 @@ export class DataTableComponent {
     };
   }
 
+  @AgentTool({
+    name: 'editRow',
+    description: 'Open the edit form for a row by its ID.',
+    parameters: [{ name: 'id', type: 'string', description: 'Row ID to edit', required: true }],
+  })
   private async doEditRow(params: { id: string }): Promise<AgentActionResult> {
     const row = this.data().find((r) => String(r[this.idField()]) === String(params.id));
     if (!row) {

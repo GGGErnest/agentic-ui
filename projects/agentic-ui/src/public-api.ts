@@ -8,6 +8,8 @@
 
 // Core — World Registry (values)
 export { AgentWorldService } from './lib/core/world/agent-world.service';
+export { AgentTool, collectAgentTools } from './lib/core/world/agent-tool.decorator';
+export type { AgentToolMeta } from './lib/core/world/agent-tool.decorator';
 
 // Core — World Registry (types)
 export type {

@@ -1,6 +1,14 @@
 import { Component, ChangeDetectionStrategy, inject } from '@angular/core';
 import { Router, RouterLink, RouterLinkActive } from '@angular/router';
-import { AgenticComponent, AgentAction, AGENTIC_COMPONENT, AgenticDirective } from 'agentic-ui';
+import {
+  AgenticComponent,
+  AgentAction,
+  AgentActionResult,
+  AGENTIC_COMPONENT,
+  AgenticDirective,
+  AgentTool,
+  collectAgentTools,
+} from 'agentic-ui';
 
 @Component({
   selector: 'app-nav',
@@ -16,28 +24,32 @@ export class AppNav implements AgenticComponent {
 
   private readonly router = inject(Router);
 
-  readonly agenticActions: AgentAction[] = [
-    {
-      name: 'navigateTo',
-      description: 'Navigate to a page in the application.',
-      parameters: [
-        {
-          name: 'route',
-          type: 'string',
-          description: 'The page to navigate to',
-          enum: ['tasks', 'profile'],
-          required: true,
-        },
-      ],
-      execute: async (params) => {
-        const route = typeof params?.['route'] === 'string' ? params['route'] : null;
-        const valid = ['tasks', 'profile'];
-        if (!route || !valid.includes(route)) {
-          return { success: false, message: `Unknown route "${route}". Valid: ${valid.join(', ')}` };
-        }
-        await this.router.navigate([`/${route}`]);
-        return { success: true, message: `Navigated to ${route}.` };
+  private _agenticActions?: AgentAction[];
+
+  get agenticActions(): AgentAction[] {
+    return (this._agenticActions ??= collectAgentTools(this));
+  }
+
+  @AgentTool({
+    name: 'navigateTo',
+    description: 'Navigate to a page in the application.',
+    parameters: [
+      {
+        name: 'route',
+        type: 'string',
+        description: 'The page to navigate to',
+        enum: ['tasks', 'profile'],
+        required: true,
       },
-    },
-  ];
+    ],
+  })
+  private async doNavigateTo(params?: Record<string, unknown>): Promise<AgentActionResult> {
+    const route = typeof params?.['route'] === 'string' ? params['route'] : null;
+    const valid = ['tasks', 'profile'];
+    if (!route || !valid.includes(route)) {
+      return { success: false, message: `Unknown route "${route}". Valid: ${valid.join(', ')}` };
+    }
+    await this.router.navigate([`/${route}`]);
+    return { success: true, message: `Navigated to ${route}.` };
+  }
 }

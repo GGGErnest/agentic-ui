@@ -1,6 +1,13 @@
 import { ChangeDetectionStrategy, Component, signal, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { AgenticComponent, AgentAction, AGENTIC_COMPONENT } from 'agentic-ui';
+import {
+  AgenticComponent,
+  AgentAction,
+  AgentActionResult,
+  AGENTIC_COMPONENT,
+  AgentTool,
+  collectAgentTools,
+} from 'agentic-ui';
 import { ActivityService } from '../../../services/activity.service';
 
 export interface UserPreferences {
@@ -35,69 +42,76 @@ export class ProfilePreferences implements AgenticComponent {
 
   readonly prefs = signal<UserPreferences>({ ...DEFAULT_PREFS });
 
-  readonly agenticActions: AgentAction[] = [
-    {
-      name: 'getPreferences',
-      description: 'Retrieve all current user preferences.',
-      execute: async () => ({
-        success: true,
-        data: { ...this.prefs() },
-        message: 'Preferences retrieved successfully.',
-      }),
-    } satisfies AgentAction,
-    {
-      name: 'setPreference',
-      description: 'Update a specific user preference.',
-      parameters: [
-        {
-          name: 'key',
-          type: 'string',
-          description:
-            'Preference key: emailNotifications, pushNotifications, theme, language, or compactView',
-          required: true,
-          enum: ['emailNotifications', 'pushNotifications', 'theme', 'language', 'compactView'],
-        },
-        { name: 'value', type: 'string', description: 'New preference value', required: true },
-      ],
-      execute: async (params) => {
-        const key = typeof params?.['key'] === 'string' ? params['key'] : null;
-        const rawValue = params?.['value'];
+  private _agenticActions?: AgentAction[];
 
-        if (!key) {
-          return { success: false, message: 'Invalid parameters.' };
-        }
+  get agenticActions(): AgentAction[] {
+    return (this._agenticActions ??= collectAgentTools(this));
+  }
 
-        const current = this.prefs();
-        if (!(key in current)) {
-          return { success: false, message: `Unknown preference key: ${key}` };
-        }
+  @AgentTool({
+    name: 'getPreferences',
+    description: 'Retrieve all current user preferences.',
+  })
+  private async doGetPreferences(): Promise<AgentActionResult> {
+    return {
+      success: true,
+      data: { ...this.prefs() },
+      message: 'Preferences retrieved successfully.',
+    };
+  }
 
-        const currentValue = current[key as keyof UserPreferences];
-        let coercedValue: unknown;
-
-        if (typeof currentValue === 'boolean') {
-          coercedValue = rawValue === true || rawValue === 'true';
-        } else {
-          coercedValue = String(rawValue);
-        }
-
-        this.prefs.set({
-          ...current,
-          [key]: coercedValue,
-        });
-
-        this.activityService.log({
-          type: 'preference_changed',
-          description: `Preference ${key} updated to ${coercedValue}`,
-        });
-
-        return { success: true, message: `Preference ${key} updated.` };
+  @AgentTool({
+    name: 'setPreference',
+    description: 'Update a specific user preference.',
+    parameters: [
+      {
+        name: 'key',
+        type: 'string',
+        description:
+          'Preference key: emailNotifications, pushNotifications, theme, language, or compactView',
+        required: true,
+        enum: ['emailNotifications', 'pushNotifications', 'theme', 'language', 'compactView'],
       },
-    } satisfies AgentAction,
-  ];
+      { name: 'value', type: 'string', description: 'New preference value', required: true },
+    ],
+  })
+  private async doSetPreference(params?: Record<string, unknown>): Promise<AgentActionResult> {
+    const key = typeof params?.['key'] === 'string' ? params['key'] : null;
+    const rawValue = params?.['value'];
+
+    if (!key) {
+      return { success: false, message: 'Invalid parameters.' };
+    }
+
+    const current = this.prefs();
+    if (!(key in current)) {
+      return { success: false, message: `Unknown preference key: ${key}` };
+    }
+
+    const currentValue = current[key as keyof UserPreferences];
+    let coercedValue: unknown;
+
+    if (typeof currentValue === 'boolean') {
+      coercedValue = rawValue === true || rawValue === 'true';
+    } else {
+      coercedValue = String(rawValue);
+    }
+
+    this.prefs.set({
+      ...current,
+      [key]: coercedValue,
+    });
+
+    this.activityService.log({
+      type: 'preference_changed',
+      description: `Preference ${key} updated to ${coercedValue}`,
+    });
+
+    return { success: true, message: `Preference ${key} updated.` };
+  }
 
   private setPref(key: keyof UserPreferences, value: unknown): void {
-    this.agenticActions.find((a) => a.name === 'setPreference')?.execute({ key, value });
+    this.doSetPreference({ key, value });
   }
 
   onEmailNotificationsChange(event: Event): void {
